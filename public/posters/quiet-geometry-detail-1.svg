@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="90 120 720 960">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#efe7db"/>
+      <stop offset="100%" stop-color="#d9cbb8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#a8603c" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#a8603c" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+  </defs>
+  <rect width="900" height="1200" fill="url(#bg)"/>
+  <circle cx="294" cy="420" r="300" fill="url(#glow)" opacity="0.55"/>
+  <circle cx="598" cy="300" r="150" fill="none" stroke="#2b2620" stroke-opacity="0.35" stroke-width="1.5"/>
+  <path d="M0 700 Q 240 560 450 690 T 900 640" fill="none" stroke="#2b2620" stroke-opacity="0.25" stroke-width="1.5"/>
+  <rect x="0" y="0" width="900" height="1200" filter="url(#grain)" opacity="0.06"/>
+  <rect x="48" y="48" width="804" height="1104" fill="none" stroke="#2b2620" stroke-opacity="0.25" stroke-width="1.5"/>
+  <text x="72" y="150" font-family="Helvetica, Arial, sans-serif" font-size="20" letter-spacing="7" fill="#2b2620" opacity="0.75">POSTERAI — SERI 03</text>
+  <text x="72" y="810" font-family="Georgia, 'Times New Roman', serif" font-size="86" font-weight="700" letter-spacing="-2" fill="#2b2620">QUIET</text>
+  <text x="72" y="906" font-family="Georgia, 'Times New Roman', serif" font-size="86" font-weight="700" letter-spacing="-2" fill="#2b2620">GEOMETRY</text>
+  <text x="72" y="1090" font-family="Helvetica, Arial, sans-serif" font-size="19" letter-spacing="4" fill="#2b2620" opacity="0.7">AI GENERATE × FINISHING MANUSIA</text>
+</svg>

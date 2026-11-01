@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         String        @default("USER")
+  createdAt    DateTime      @default(now())
+  orders       Order[]
+  customOrders CustomOrder[]
+}
+
+model Poster {
+  id          String      @id @default(cuid())
+  slug        String      @unique
+  title       String
+  description String
+  aiPrompt    String?
+  humanNote   String?
+  category    String
+  imageUrl    String
+  gallery     String      @default("[]")
+  basePrice   Int
+  featured    Boolean     @default(false)
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  variants    Variant[]
+  orderItems  OrderItem[]
+}
+
+model Variant {
+  id       String  @id @default(cuid())
+  posterId String
+  poster   Poster  @relation(fields: [posterId], references: [id], onDelete: Cascade)
+  size     String
+  frame    String
+  price    Int
+  stock    Int     @default(0)
+
+  @@unique([posterId, size, frame])
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  orderNumber  String      @unique
+  idempotencyKey String?   @unique
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id])
+  status       String      @default("PAID")
+  stockRestored Boolean    @default(false)
+  subtotal     Int
+  shippingCost Int
+  total        Int
+  shipName     String
+  shipPhone    String
+  shipAddress  String
+  shipCity     String
+  shipPostal   String
+  shipNote     String?
+  createdAt    DateTime    @default(now())
+  items        OrderItem[]
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  posterId  String
+  poster    Poster @relation(fields: [posterId], references: [id])
+  variantId String?
+  title     String
+  imageUrl  String
+  size      String
+  frame     String
+  unitPrice Int
+  quantity  Int
+}
+
+model CustomOrder {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  title        String
+  brief        String
+  style        String
+  size         String
+  referenceUrl String?
+  budget       Int?
+  status       String   @default("REQUESTED")
+  quotedPrice  Int?
+  adminNote    String?
+  createdAt    DateTime @default(now())
+}

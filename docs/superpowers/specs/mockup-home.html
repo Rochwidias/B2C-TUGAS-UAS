@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PosterAI — Home Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ========================================
+   DESIGN TOKENS (same as design-system mockup)
+   ======================================== */
+:root {
+  --bg: #FFFDF8; --surface: #FFFFFF; --surface-alt: #F5F0E8; --ink: #1A1612; --ink-muted: #6B5D4E;
+  --accent-primary: #E85D04; --accent-secondary: #0096C7; --accent-tertiary: #9B2226;
+  --playful-mint: #2EC4B6; --playful-peach: #FF9F1C; --playful-lavender: #A663CC;
+  --playful-sage: #52B788; --playful-coral: #F72585; --playful-butter: #FFD60A;
+  --cat-cyberpunk: #F72585; --cat-cyberpunk-2: #0096C7; --cat-minimalis: #1A1612; --cat-minimalis-2: #FFD60A;
+  --cat-retro: #FF9F1C; --cat-retro-2: #E85D04; --cat-alam: #52B788; --cat-alam-2: #2EC4B6;
+  --cat-abstrak: #A663CC; --cat-abstrak-2: #F72585; --cat-tipografi: #A663CC; --cat-tipografi-2: #0096C7;
+  --color-coral-soft: rgba(247,37,133,0.12); --color-mint-soft: rgba(46,196,182,0.12);
+  --color-lavender-soft: rgba(166,99,204,0.12); --color-sage-soft: rgba(82,183,136,0.12);
+  --color-peach-soft: rgba(255,159,28,0.12); --color-butter-soft: rgba(255,214,10,0.12);
+  --color-cyan-soft: rgba(0,150,199,0.12); --color-terracotta-soft: rgba(232,93,4,0.12);
+  --gradient-hero: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 50%, var(--playful-coral) 100%);
+  --gradient-card: linear-gradient(145deg, var(--surface) 0%, var(--surface-alt) 100%);
+  --gradient-accent: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  --gradient-cyberpunk: linear-gradient(135deg, var(--cat-cyberpunk), var(--cat-cyberpunk-2));
+  --gradient-minimalis: linear-gradient(135deg, var(--cat-minimalis), var(--cat-minimalis-2));
+  --gradient-retro: linear-gradient(135deg, var(--cat-retro), var(--cat-retro-2));
+  --gradient-alam: linear-gradient(135deg, var(--cat-alam), var(--cat-alam-2));
+  --gradient-abstrak: linear-gradient(135deg, var(--cat-abstrak), var(--cat-abstrak-2));
+  --gradient-tipografi: linear-gradient(135deg, var(--cat-tipografi), var(--cat-tipografi-2));
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --text-display-xl: clamp(3rem, 8vw, 6rem); --text-display-lg: clamp(2.5rem, 6vw, 4.5rem);
+  --text-display-md: clamp(2rem, 4vw, 3rem); --text-display-sm: clamp(1.5rem, 3vw, 2.25rem);
+  --text-heading-xl: clamp(1.75rem, 2.5vw, 2.25rem); --text-heading-lg: clamp(1.375rem, 2vw, 1.75rem);
+  --text-heading-md: 1.25rem; --text-body-lg: 1.125rem; --text-body: 1rem;
+  --text-body-sm: 0.875rem; --text-caption: 0.75rem; --text-micro: 0.625rem;
+  --radius-xs: 0.375rem; --radius-sm: 0.5rem; --radius-md: 0.75rem; --radius-lg: 1rem;
+  --radius-xl: 1.5rem; --radius-2xl: 2rem; --radius-full: 9999px;
+  --radius-blob: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  --shadow-sm: 0 1px 2px rgb(26 22 18 / 0.06);
+  --shadow-card: 0 4px 24px -8px rgb(26 22 18 / 0.12), 0 1px 3px rgb(26 22 18 / 0.06);
+  --shadow-card-hover: 0 20px 48px -16px rgb(26 22 18 / 0.18), 0 8px 20px -8px rgb(26 22 18 / 0.1);
+  --shadow-float: 0 24px 64px -24px rgb(26 22 18 / 0.2);
+  --shadow-glow-terracotta: 0 0 32px -8px rgba(232,93,4,0.4);
+  --space-0: 0; --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem; --space-12: 3rem;
+  --space-16: 4rem; --space-20: 5rem; --space-24: 6rem; --space-32: 8rem;
+  --duration-fast: 150ms; --duration-normal: 200ms; --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font-body); font-size: var(--text-body); line-height: 1.6; color: var(--ink); background: var(--bg); min-height: 100vh; }
+h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+h1 { font-size: var(--text-display-lg); font-weight: 800; } h2 { font-size: var(--text-display-sm); font-weight: 700; }
+h3 { font-size: var(--text-heading-xl); font-weight: 700; } h4 { font-size: var(--text-heading-lg); font-weight: 600; }
+:focus-visible { outline: 3px solid var(--accent-primary); outline-offset: 3px; border-radius: var(--radius-sm); }
+.skip-link { position: absolute; top: -100%; left: 50%; transform: translateX(-50%); padding: var(--space-3) var(--space-6); background: var(--accent-primary); color: var(--bg); font-family: var(--font-display); font-weight: 600; border-radius: var(--radius-full); z-index: 9999; transition: top var(--duration-fast); }
+.skip-link:focus { top: var(--space-4); }
+.container { width: 100%; max-width: 80rem; margin: 0 auto; padding: 0 var(--space-6); }
+@media (min-width: 768px) { .container { padding: 0 var(--space-8); } }
+@media (min-width: 1280px) { .container { padding: 0 var(--space-12); } }
+.section { padding: var(--space-24) 0; } .section-lg { padding: var(--space-32) 0; } .section-sm { padding: var(--space-16) 0; }
+.flex { display: flex; } .items-center { align-items: center; } .justify-between { justify-content: space-between; }
+.gap-2 { gap: var(--space-2); } .gap-3 { gap: var(--space-3); } .gap-4 { gap: var(--space-4); } .gap-6 { gap: var(--space-6); } .gap-8 { gap: var(--space-8); }
+.flex-1 { flex: 1; } .flex-col { flex-direction: column; } .flex-wrap { flex-wrap: wrap; }
+.text-center { text-align: center; } .text-ink { color: var(--ink); } .text-ink-muted { color: var(--ink-muted); }
+.font-display { font-family: var(--font-display); } .font-bold { font-weight: 700; } .font-semibold { font-weight: 600; } .font-medium { font-weight: 500; }
+.rounded-xl { border-radius: var(--radius-xl); } .rounded-2xl { border-radius: var(--radius-2xl); } .rounded-full { border-radius: var(--radius-full); } .rounded-blob { border-radius: var(--radius-blob); }
+.shadow-card { box-shadow: var(--shadow-card); }
+.shadow-card-hover:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-4px); transition: all var(--duration-normal) var(--ease-out); }
+.gradient-text { background: var(--gradient-hero); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.blob-bg { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.blob-bg::before, .blob-bg::after, .blob-bg span { content: ""; position: absolute; border-radius: var(--radius-blob); filter: blur(80px); opacity: 0.5; animation: blobFloat 20s ease-in-out infinite; }
+.blob-bg::before { width: 500px; height: 500px; top: -150px; left: -150px; background: var(--color-coral-soft); animation-delay: 0s; }
+.blob-bg::after { width: 400px; height: 400px; bottom: -100px; right: -100px; background: var(--color-mint-soft); animation-delay: -7s; }
+.blob-bg span { width: 300px; height: 300px; top: 30%; left: 60%; background: var(--color-lavender-soft); animation-delay: -14s; }
+@keyframes blobFloat { 0%,100% { transform: translate(0,0) scale(1) rotate(0deg); border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; } 25% { transform: translate(30px,-20px) scale(1.1) rotate(2deg); border-radius: 40% 60% 70% 30% / 40% 70% 30% 60%; } 50% { transform: translate(-20px,30px) scale(0.95) rotate(-1deg); border-radius: 70% 30% 40% 60% / 70% 30% 60% 40%; } 75% { transform: translate(20px,20px) scale(1.05) rotate(1deg); border-radius: 30% 70% 60% 40% / 30% 60% 40% 70%; } }
+.eyebrow { font-family: var(--font-display); font-size: var(--text-micro); font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-muted); }
+
+/* --- Button --- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); font-family: var(--font-display); font-weight: 600; font-size: var(--text-body-sm); padding: var(--space-3) var(--space-6); border-radius: var(--radius-full); border: 2px solid transparent; cursor: pointer; transition: all var(--duration-fast) var(--ease-out); text-decoration: none; white-space: nowrap; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+.btn-primary { background: var(--gradient-accent); color: var(--bg); box-shadow: var(--shadow-glow-terracotta); }
+.btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 32px -8px rgba(232,93,4,0.5); }
+.btn-primary:active:not(:disabled) { transform: scale(0.97); }
+.btn-secondary { background: transparent; color: var(--accent-primary); border-color: var(--accent-primary); }
+.btn-secondary:hover:not(:disabled) { background: var(--color-terracotta-soft); }
+.btn-lg { padding: var(--space-4) var(--space-8); font-size: var(--text-body); }
+.btn-xl { padding: var(--space-5) var(--space-10); font-size: var(--text-body-lg); }
+
+/* --- Card --- */
+.card { border-radius: var(--radius-xl); overflow: hidden; transition: all var(--duration-normal) var(--ease-out); }
+.card-elevated { background: var(--surface); box-shadow: var(--shadow-card); border: 1px solid transparent; }
+.card-elevated:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-4px); }
+.card-organic { background: var(--gradient-card); border: 2px solid transparent; background-clip: padding-box; position: relative; isolation: isolate; }
+.card-organic::before { content: ""; position: absolute; inset: -2px; z-index: -1; border-radius: var(--radius-2xl); background: var(--gradient-accent); opacity: 0; transition: opacity var(--duration-normal); }
+.card-organic:hover::before { opacity: 1; }
+.card-organic:hover { transform: translateY(-4px); }
+.card__padding { padding: var(--space-6); }
+@media (min-width: 768px) { .card__padding { padding: var(--space-8); } }
+
+/* --- Badge --- */
+.badge { display: inline-flex; align-items: center; gap: var(--space-1); font-family: var(--font-display); font-weight: 600; font-size: var(--text-caption); padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: 0.05em; }
+.badge-category { color: var(--bg); font-weight: 700; box-shadow: 0 4px 16px -4px currentColor; }
+.badge-category.cyberpunk { background: var(--gradient-cyberpunk); }
+.badge-category.minimalis { background: var(--gradient-minimalis); }
+.badge-category.retro { background: var(--gradient-retro); }
+.badge-category.alam { background: var(--gradient-alam); }
+.badge-category.abstrak { background: var(--gradient-abstrak); }
+.badge-category.tipografi { background: var(--gradient-tipografi); }
+
+/* --- Category Pill --- */
+.category-pill { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); font-family: var(--font-display); font-weight: 600; font-size: var(--text-caption); text-transform: uppercase; letter-spacing: 0.05em; color: var(--bg); box-shadow: 0 4px 16px -4px currentColor; transition: all var(--duration-fast); }
+.category-pill:hover { transform: scale(1.05); }
+.category-pill.cyberpunk { background: var(--gradient-cyberpunk); }
+.category-pill.minimalis { background: var(--gradient-minimalis); }
+.category-pill.retro { background: var(--gradient-retro); }
+.category-pill.alam { background: var(--gradient-alam); }
+.category-pill.abstrak { background: var(--gradient-abstrak); }
+.category-pill.tipografi { background: var(--gradient-tipografi); }
+
+/* --- Poster Card --- */
+.poster-card { display: block; text-decoration: none; color: inherit; border-radius: var(--radius-2xl); overflow: hidden; background: var(--surface); box-shadow: var(--shadow-card); transition: all var(--duration-normal) var(--ease-out); animation: enter 0.6s var(--ease-out) both; }
+.poster-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-6px); }
+.poster-card__image { position: relative; aspect-ratio: 3/4; overflow: hidden; clip-path: polygon(0 0, 100% 0, 100% 85%, 50% 100%, 0 85%); }
+.poster-card__image img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.7s var(--ease-out); }
+.poster-card:hover .poster-card__image img { transform: scale(1.03); }
+.poster-card__accent-bar { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--gradient-accent); transform: scaleX(0); transform-origin: left; transition: transform var(--duration-normal) var(--ease-out); }
+.poster-card:hover .poster-card__accent-bar { transform: scaleX(1); }
+.poster-card__overlay { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: var(--space-3); pointer-events: none; opacity: 0; transition: opacity var(--duration-fast); }
+.poster-card:hover .poster-card__overlay { opacity: 1; pointer-events: auto; }
+.poster-card__actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.poster-card__action { width: 40px; height: 40px; border-radius: var(--radius-full); background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; color: var(--ink-muted); border: none; cursor: pointer; transform: scale(0.8); opacity: 0; transition: all var(--duration-fast) var(--ease-spring); }
+.poster-card:hover .poster-card__action { transform: scale(1); opacity: 1; }
+.poster-card__action:hover { background: var(--surface); color: var(--accent-primary); box-shadow: var(--shadow-card); }
+.poster-card__action:nth-child(1) { transition-delay: 40ms; } .poster-card__action:nth-child(2) { transition-delay: 80ms; }
+.poster-card__content { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.poster-card__title { font-family: var(--font-display); font-size: var(--text-heading-lg); font-weight: 700; line-height: 1.2; }
+.poster-card__footer { display: flex; align-items: center; justify-content: space-between; padding-top: var(--space-3); border-top: 1px solid var(--surface-alt); }
+.poster-card__price { font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 700; color: var(--accent-primary); }
+.poster-card__meta { font-size: var(--text-caption); color: var(--ink-muted); }
+
+/* --- Animations --- */
+@keyframes enter { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: none; } }
+.stagger-1 { animation-delay: 60ms; } .stagger-2 { animation-delay: 120ms; } .stagger-3 { animation-delay: 180ms; }
+.stagger-4 { animation-delay: 240ms; } .stagger-5 { animation-delay: 300ms; } .stagger-6 { animation-delay: 360ms; }
+.stagger-7 { animation-delay: 420ms; } .stagger-8 { animation-delay: 480ms; } .stagger-9 { animation-delay: 540ms; }
+.stagger-10 { animation-delay: 600ms; } .stagger-11 { animation-delay: 660ms; } .stagger-12 { animation-delay: 720ms; }
+@keyframes countUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.animate-count { animation: countUp 0.8s var(--ease-out) both; }
+@keyframes pulse-subtle { 0%,100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+.animate-pulse-subtle { animation: pulse-subtle 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+
+/* --- HEADER --- */
+.site-header { position: sticky; top: 0; z-index: 100; background: rgba(255,253,248,0.9); backdrop-filter: blur(20px); border-bottom: 1px solid var(--surface-alt); transition: all var(--duration-normal); }
+.site-header.scrolled { box-shadow: var(--shadow-sm); border-color: var(--ink-muted); }
+.header-inner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); height: 72px; }
+.logo { display: flex; align-items: baseline; gap: var(--space-2); text-decoration: none; color: var(--ink); }
+.logo__text { font-family: var(--font-display); font-size: var(--text-heading-lg); font-weight: 800; letter-spacing: -0.02em; }
+.logo__dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--accent-primary); animation: pulse-subtle 2s ease-in-out infinite; }
+.nav { display: none; gap: var(--space-1); }
+@media (min-width: 768px) { .nav { display: flex; } }
+.nav__link { padding: var(--space-2) var(--space-4); border-radius: var(--radius-xl); font-family: var(--font-display); font-weight: 500; font-size: var(--text-body-sm); color: var(--ink-muted); text-decoration: none; transition: all var(--duration-fast); }
+.nav__link:hover { color: var(--ink); background: var(--surface-alt); }
+.header-actions { display: flex; align-items: center; gap: var(--space-2); }
+.cart-btn { position: relative; width: 44px; height: 44px; border-radius: var(--radius-full); background: var(--surface); border: 1px solid var(--surface-alt); display: flex; align-items: center; justify-content: center; color: var(--ink); cursor: pointer; transition: all var(--duration-fast); }
+.cart-btn:hover { background: var(--surface-alt); border-color: var(--accent-primary); color: var(--accent-primary); }
+.cart-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: var(--radius-full); background: var(--accent-primary); color: var(--bg); font-family: var(--font-display); font-weight: 700; font-size: var(--text-micro); display: flex; align-items: center; justify-content: center; padding: 0 var(--space-1); }
+.auth-btn { display: none; gap: var(--space-2); }
+@media (min-width: 768px) { .auth-btn { display: flex; } }
+.mobile-menu-btn { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-xl); background: transparent; border: none; color: var(--ink-muted); cursor: pointer; }
+@media (min-width: 768px) { .mobile-menu-btn { display: none; } }
+
+/* --- HERO --- */
+.hero { position: relative; border-bottom: 1px solid var(--surface-alt); overflow: hidden; }
+.hero__inner { display: grid; gap: var(--space-12); padding: var(--space-24) 0; align-items: center; }
+@media (min-width: 1024px) { .hero__inner { grid-template-columns: 1.15fr 0.85fr; padding: var(--space-32) 0; } }
+.hero__copy { max-width: 48rem; }
+.hero__eyebrow { margin-bottom: var(--space-5); }
+.hero__title { font-size: var(--text-display-lg); line-height: 1.05; margin-bottom: var(--space-6); }
+.hero__subtitle { font-size: var(--text-body-lg); color: var(--ink-muted); max-width: 40ch; margin-bottom: var(--space-10); }
+.hero__cta { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-14); }
+.hero__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-6); }
+@media (min-width: 640px) { .hero__stats { grid-template-columns: repeat(4, 1fr); } }
+.stat { text-align: center; }
+.stat__icon { font-size: 2.5rem; margin-bottom: var(--space-1); }
+.stat__value { font-family: var(--font-display); font-size: clamp(2rem, 4vw, 3rem); font-weight: 800; color: var(--ink); line-height: 1; }
+.stat__label { font-size: var(--text-caption); color: var(--ink-muted); margin-top: var(--space-1); }
+.hero__visual { display: none; position: relative; }
+@media (min-width: 1024px) { .hero__visual { display: block; } }
+.hero__visual-bg { position: absolute; inset: 0; rotate: 3deg; border-radius: var(--radius-2xl); border: 1px solid var(--surface-alt); background: var(--surface-alt); opacity: 0.5; }
+.hero__visual-card { position: relative; rotate: -3deg; border-radius: var(--radius-2xl); border: 1px solid var(--surface-alt); background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; aspect-ratio: 3/4; animation: enter 0.8s var(--ease-out) 0.2s both; }
+.hero__visual-card img { width: 100%; height: 100%; object-fit: cover; }
+.hero__visual-accent { position: absolute; bottom: 0; right: 0; width: 96px; height: 96px; background: linear-gradient(135deg, var(--accent-primary) 0%, transparent 70%); border-radius: 0 0 var(--radius-2xl) 0; opacity: 0.3; }
+.hero__floating { position: absolute; animation: blobFloat 6s ease-in-out infinite; }
+.hero__floating-1 { bottom: -24px; left: -24px; animation-delay: 0s; }
+.hero__floating-2 { bottom: -24px; right: -24px; animation-delay: 1s; }
+.floating-badge { background: rgba(255,255,255,0.9); backdrop-filter: blur(20px); border: 1px solid var(--surface-alt); padding: var(--space-3) var(--space-5); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); text-align: center; }
+.floating-badge__num { font-family: var(--font-display); font-size: 2rem; font-weight: 800; line-height: 1; }
+.floating-badge__num.coral { color: var(--playful-coral); }
+.floating-badge__num.cyan { color: var(--accent-secondary); }
+.floating-badge__label { font-size: var(--text-micro); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+
+/* --- PROCESS --- */
+.process { background: var(--surface-alt); border-top: 1px solid var(--surface-alt); border-bottom: 1px solid var(--surface-alt); }
+.process__header { text-align: center; margin-bottom: var(--space-16); }
+.process__grid { display: grid; gap: var(--space-8); }
+@media (min-width: 768px) { .process__grid { grid-template-columns: repeat(3, 1fr); } }
+.process-card { position: relative; padding: var(--space-8); background: var(--surface); border-radius: var(--radius-2xl); border: 1px solid var(--surface-alt); box-shadow: var(--shadow-card); transition: all var(--duration-normal) var(--ease-out); animation: enter 0.6s var(--ease-out) both; }
+.process-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-6px); }
+.process-card__number { position: absolute; top: -16px; left: var(--space-8); width: 40px; height: 40px; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-weight: 800; font-size: var(--text-body); color: var(--bg); box-shadow: var(--shadow-card); }
+.process-card:nth-child(1) .process-card__number { background: var(--gradient-cyberpunk); }
+.process-card:nth-child(2) .process-card__number { background: var(--gradient-retro); }
+.process-card:nth-child(3) .process-card__number { background: var(--gradient-alam); }
+.process-card__icon { width: 60px; height: 60px; border-radius: var(--radius-xl); background: var(--color-terracotta-soft); display: flex; align-items: center; justify-content: center; margin-bottom: var(--space-4); color: var(--accent-primary); font-size: 1.5rem; }
+.process-card__title { margin-bottom: var(--space-3); }
+.process-card__desc { color: var(--ink-muted); line-height: 1.7; }
+.process-card__bar { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--gradient-accent); transform: scaleX(0); transform-origin: center; border-radius: 0 0 var(--radius-2xl) var(--radius-2xl); transition: transform var(--duration-normal) var(--ease-out); }
+.process-card:hover .process-card__bar { transform: scaleX(1); }
+
+/* --- FEATURED --- */
+.featured { }
+.featured__header { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-10); text-align: center; }
+@media (min-width: 768px) { .featured__header { flex-direction: row; align-items: flex-end; justify-content: space-between; text-align: left; } }
+.featured__title { margin-bottom: var(--space-2); }
+.featured__link { display: inline-flex; align-items: center; gap: var(--space-2); font-family: var(--font-display); font-weight: 600; font-size: var(--text-body); color: var(--accent-primary); text-decoration: none; transition: all var(--duration-fast); }
+.featured__link:hover { gap: var(--space-3); }
+.featured__grid { display: grid; gap: var(--space-6); grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 768px) { .featured__grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1024px) { .featured__grid { grid-template-columns: repeat(4, 1fr); } }
+.featured__item.featured { grid-column: span 2; grid-row: span 2; }
+@media (max-width: 1023px) { .featured__item.featured { grid-column: span 2; grid-row: auto; } }
+
+/* --- CUSTOM CTA --- */
+.custom-cta { border-top: 1px solid var(--surface-alt); border-bottom: 1px solid var(--surface-alt); background: var(--surface-alt); }
+.custom-cta__inner { position: relative; border-radius: var(--radius-2xl); overflow: hidden; padding: var(--space-12) var(--space-6); background: linear-gradient(135deg, var(--ink) 0%, var(--ink) 100%); }
+@media (min-width: 768px) { .custom-cta__inner { padding: var(--space-16) var(--space-12); } }
+@media (min-width: 1024px) { .custom-cta__inner { padding: var(--space-24) var(--space-20); } }
+.custom-cta__blobs { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.custom-cta__blobs::before { content: ""; position: absolute; top: 0; right: 0; width: 24rem; height: 24rem; border-radius: var(--radius-full); background: var(--color-cyan-soft); filter: blur(60px); opacity: 0.6; }
+.custom-cta__blobs::after { content: ""; position: absolute; bottom: 0; left: 0; width: 18rem; height: 18rem; border-radius: var(--radius-full); background: var(--color-coral-soft); filter: blur(60px); opacity: 0.6; }
+.custom-cta__content { position: relative; z-index: 1; max-width: 40rem; }
+.custom-cta__eyebrow { color: rgba(255,253,248,0.6); margin-bottom: var(--space-4); }
+.custom-cta__title { font-size: var(--text-display-md); color: var(--bg); line-height: 1.1; margin-bottom: var(--space-5); }
+.custom-cta__desc { font-size: var(--text-body-lg); color: rgba(255,253,248,0.7); line-height: 1.7; margin-bottom: var(--space-8); }
+.custom-cta__actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-12); }
+.custom-cta__btn-secondary { background: transparent; color: var(--bg); border-color: rgba(255,253,248,0.3); }
+.custom-cta__btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: var(--bg); }
+.custom-cta__btn-ghost { background: transparent; color: rgba(255,253,248,0.7); border-color: transparent; }
+.custom-cta__btn-ghost:hover { background: rgba(255,255,255,0.1); color: var(--bg); }
+.custom-cta__trust { display: flex; flex-wrap: wrap; gap: var(--space-6) var(--space-8); font-size: var(--text-body-sm); color: rgba(255,253,248,0.6); }
+.custom-cta__trust-item { display: flex; align-items: center; gap: var(--space-2); }
+
+/* --- NEWSLETTER --- */
+.newsletter { text-align: center; }
+.newsletter__header { max-width: 40rem; margin: 0 auto var(--space-8); }
+.newsletter__eyebrow { margin-bottom: var(--space-3); }
+.newsletter__title { font-size: var(--text-display-sm); margin-bottom: var(--space-4); }
+.newsletter__desc { font-size: var(--text-body-lg); color: var(--ink-muted); }
+.newsletter__form { display: flex; flex-direction: column; gap: var(--space-3); max-width: 32rem; margin: 0 auto var(--space-3); }
+@media (min-width: 640px) { .newsletter__form { flex-direction: row; } }
+.newsletter__input { flex: 1; padding: var(--space-4) var(--space-5); font-family: var(--font-body); font-size: var(--text-body); color: var(--ink); background: var(--surface); border: 1px solid var(--surface-alt); border-radius: var(--radius-xl); outline: none; transition: all var(--duration-fast); }
+.newsletter__input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 4px var(--color-terracotta-soft); }
+.newsletter__submit { padding: var(--space-4) var(--space-8); white-space: nowrap; }
+.newsletter__disclaimer { font-size: var(--text-caption); color: var(--ink-muted); }
+
+/* --- FOOTER --- */
+.site-footer { border-top: 1px solid var(--surface-alt); background: var(--surface-alt); }
+.footer__grid { display: grid; gap: var(--space-10); padding: var(--space-24) 0; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .footer__grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .footer__grid { grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr; } }
+.footer__brand { display: flex; flex-direction: column; gap: var(--space-6); }
+.footer__logo { display: inline-flex; align-items: baseline; gap: var(--space-2); text-decoration: none; color: var(--ink); }
+.footer__logo-text { font-family: var(--font-display); font-size: var(--text-heading-lg); font-weight: 800; }
+.footer__logo-dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--accent-primary); }
+.footer__desc { max-width: 20rem; font-size: var(--text-body); color: var(--ink-muted); line-height: 1.7; }
+.footer__social { display: flex; gap: var(--space-3); }
+.social-link { width: 44px; height: 44px; border-radius: var(--radius-xl); background: var(--surface); border: 1px solid var(--surface-alt); display: flex; align-items: center; justify-content: center; color: var(--ink-muted); text-decoration: none; transition: all var(--duration-fast); }
+.social-link:hover { background: var(--surface-alt); color: var(--accent-primary); border-color: var(--accent-primary); }
+.footer__nav-title { font-family: var(--font-display); font-size: var(--text-micro); font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: var(--space-4); }
+.footer__nav { display: flex; flex-direction: column; gap: var(--space-3); }
+.footer__nav-link { font-size: var(--text-body); color: var(--ink-muted); text-decoration: none; transition: color var(--duration-fast); }
+.footer__nav-link:hover { color: var(--accent-primary); }
+.footer__newsletter-title { font-family: var(--font-display); font-size: var(--text-heading-md); margin-bottom: var(--space-4); }
+.footer__newsletter-form { display: flex; flex-direction: column; gap: var(--space-3); }
+.footer__newsletter-input-wrapper { position: relative; }
+.footer__newsletter-input { width: 100%; padding: var(--space-3) var(--space-4); font-family: var(--font-body); font-size: var(--text-body); color: var(--ink); background: var(--surface); border: 1px solid var(--surface-alt); border-radius: var(--radius-xl); outline: none; }
+.footer__newsletter-input:focus { border-color: var(--accent-primary); }
+.footer__newsletter-submit { position: absolute; right: var(--space-2); top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: var(--radius-lg); background: var(--accent-primary); color: var(--bg); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all var(--duration-fast); }
+.footer__newsletter-submit:hover { background: var(--accent-secondary); transform: translateY(-50%) scale(1.05); }
+.footer__newsletter-note { font-size: var(--text-micro); color: var(--ink-muted); }
+.footer__bottom { border-top: 1px solid var(--surface-alt); padding: var(--space-6) 0; }
+.footer__bottom-inner { display: flex; flex-direction: column; gap: var(--space-3); align-items: center; text-align: center; }
+@media (min-width: 640px) { .footer__bottom-inner { flex-direction: row; justify-content: space-between; text-align: left; } }
+.footer__copyright { font-size: var(--text-caption); color: var(--ink-muted); }
+.footer__tech { font-size: var(--text-micro); color: var(--ink-muted); }
+
+/* --- GRID HELPERS --- */
+.grid-auto-fit-280 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-6); }
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to main content</a>
+<main id="main">
+
+<!-- HEADER -->
+<header class="site-header" role="banner">
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="PosterAI - Beranda">
+      <span class="logo__text">PosterAI</span>
+      <span class="logo__dot" aria-hidden="true"></span>
+    </a>
+    <nav class="nav" aria-label="Navigasi utama">
+      <a href="/products" class="nav__link">Katalog</a>
+      <a href="/custom-order" class="nav__link">Custom Order</a>
+    </nav>
+    <div class="header-actions">
+      <button class="cart-btn" aria-label="Keranjang (3 item)">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+        <span class="cart-badge">3</span>
+      </button>
+      <div class="auth-btn">
+        <a href="/login" class="btn btn-ghost btn-sm">Masuk</a>
+        <a href="/register" class="btn btn-primary btn-sm">Daftar</a>
+      </div>
+      <button class="mobile-menu-btn" aria-label="Buka menu" aria-expanded="false" aria-controls="mobile-menu">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero" aria-labelledby="hero-title">
+  <div class="blob-bg" aria-hidden="true"></div>
+  <div class="container hero__inner">
+    <div class="hero__copy animate-slide-up">
+      <p class="eyebrow hero__eyebrow">Marketplace Poster AI + Finishing Manusia</p>
+      <h1 id="hero-title" class="hero__title">
+        Dibuat <span class="gradient-text">AI</span>,<br />
+        Diselesaikan <span class="text-accent">Manusia</span>.
+      </h1>
+      <p class="hero__subtitle">
+        Setiap poster di PosterAI dibuat dengan model generatif, lalu dikurasi,
+        diwarnai ulang, dan dirapikan satu per satu sebelum masuk produksi.
+        Hasilnya gambar yang terasa dibuat, bukan dihasilkan.
+      </p>
+      <div class="hero__cta">
+        <a href="/products" class="btn btn-primary btn-xl">Jelajahi Katalog</a>
+        <a href="/custom-order" class="btn btn-secondary btn-xl">Pesan Custom</a>
+      </div>
+      <div class="hero__stats" role="list" aria-label="Statistik toko">
+        <div class="stat animate-count" style="animation-delay: 200ms;">
+          <div class="stat__icon">🎨</div>
+          <div class="stat__value">12+</div>
+          <div class="stat__label">Koleksi Poster</div>
+        </div>
+        <div class="stat animate-count" style="animation-delay: 300ms;">
+          <div class="stat__icon">📐</div>
+          <div class="stat__value">9</div>
+          <div class="stat__label">Varian/Poster</div>
+        </div>
+        <div class="stat animate-count" style="animation-delay: 400ms;">
+          <div class="stat__icon">⚡</div>
+          <div class="stat__value">3-5</div>
+          <div class="stat__label">Hari Produksi</div>
+        </div>
+        <div class="stat animate-count" style="animation-delay: 500ms;">
+          <div class="stat__icon">🚚</div>
+          <div class="stat__value">Gratis</div>
+          <div class="stat__label">Ongkir > 250rb</div>
+        </div>
+      </div>
+    </div>
+    <div class="hero__visual animate-scale-in stagger-2">
+      <div class="hero__visual-bg" aria-hidden="true"></div>
+      <div class="hero__visual-card">
+        <img src="/posters/cyberpunk-sunset.svg" alt="Contoh poster Cyberpunk Sunset — kota neon di matahari terbenam" loading="eager">
+        <div class="hero__visual-accent" aria-hidden="true"></div>
+      </div>
+      <div class="hero__floating hero__floating-1">
+        <div class="floating-badge">
+          <div class="floating-badge__num coral">12</div>
+          <div class="floating-badge__label">Koleksi Unik</div>
+        </div>
+      </div>
+      <div class="hero__floating hero__floating-2">
+        <div class="floating-badge">
+          <div class="floating-badge__num cyan">9</div>
+          <div class="floating-badge__label">Varian/Poster</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROCESS -->
+<section class="process section-lg" aria-labelledby="process-title">
+  <div class="container">
+    <header class="process__header">
+      <p class="eyebrow">Proses Kami</p>
+      <h2 id="process-title">Bagaimana Poster Ini Dibuat</h2>
+      <p style="margin-top: var(--space-3); max-width: 40rem; margin-left: auto; margin-right: auto; color: var(--ink-muted);">
+        Setiap langkah melibatkan kecerdasan buatan dan kepekaan tangan manusia
+      </p>
+    </header>
+    <div class="process__grid">
+      <article class="process-card stagger-1">
+        <span class="process-card__number">01</span>
+        <div class="process-card__icon">
+          <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.734-.988-2.386l-.548-.547z"/></svg>
+        </div>
+        <h3 class="process-card__title">Prompt & Generate</h3>
+        <p class="process-card__desc">Tim menulis prompt rinci per tema, lalu menghasilkan beberapa kandidat gambar dengan model AI generatif.</p>
+        <div class="process-card__bar" aria-hidden="true"></div>
+      </article>
+      <article class="process-card stagger-2">
+        <span class="process-card__number">02</span>
+        <div class="process-card__icon">
+          <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+        </div>
+        <h3 class="process-card__title">Finishing Manusia</h3>
+        <p class="process-card__desc">Kandidat terbaik dirapikan manual: komposisi, kontras, tipografi, dan koreksi warna cetak — detail yang AI lewatkan.</p>
+        <div class="process-card__bar" aria-hidden="true"></div>
+      </article>
+      <article class="process-card stagger-3">
+        <span class="process-card__number">03</span>
+        <div class="process-card__icon">
+          <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        </div>
+        <h3 class="process-card__title">Cetak & Kirim</h3>
+        <p class="process-card__desc">Dicetak di kertas fine art 260 gsm, dibingkai bila diminta, dikemas tabung/bingkai kayu, lalu dikirim ke alamat Anda.</p>
+        <div class="process-card__bar" aria-hidden="true"></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURED POSTERS -->
+<section class="featured section-lg" aria-labelledby="featured-title">
+  <div class="container">
+    <header class="featured__header">
+      <div>
+        <p class="eyebrow">Pilihan Kurator</p>
+        <h2 id="featured-title" class="featured__title">Poster Unggulan</h2>
+        <p style="color: var(--ink-muted);">Koleksi terbaik yang dipilih tim — siap cetak dalam 3-5 hari</p>
+      </div>
+      <a href="/products" class="featured__link">
+        Semua poster
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>
+      </a>
+    </header>
+    <div class="featured__grid grid-auto-fit-280">
+      <a href="/products/cyberpunk-sunset" class="poster-card featured stagger-1">
+        <div class="poster-card__image">
+          <div class="poster-card__accent-bar" style="background: var(--gradient-cyberpunk);"></div>
+          <img src="/posters/cyberpunk-sunset.svg" alt="Poster Cyberpunk Sunset" loading="eager">
+          <div class="poster-card__overlay">
+            <div class="poster-card__actions">
+              <button class="poster-card__action" aria-label="Bagikan"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg></button>
+              <button class="poster-card__action" aria-label="Wishlist"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="poster-card__content">
+          <h3 class="poster-card__title">Cyberpunk Sunset</h3>
+          <div class="poster-card__footer">
+            <span class="poster-card__price">Mulai Rp 150.000</span>
+            <span class="poster-card__meta">3 ukuran · 3 bingkai</span>
+          </div>
+        </div>
+      </a>
+      <a href="/products/mountain-mist" class="poster-card stagger-2">
+        <div class="poster-card__image">
+          <div class="poster-card__accent-bar" style="background: var(--gradient-alam);"></div>
+          <img src="/posters/mountain-mist.svg" alt="Poster Mountain Mist" loading="lazy">
+          <div class="poster-card__overlay"><div class="poster-card__actions"><button class="poster-card__action"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg></button><button class="poster-card__action"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg></button></div></div>
+        </div>
+        <div class="poster-card__content"><h3 class="poster-card__title">Mountain Mist</h3><div class="poster-card__footer"><span class="poster-card__price">Mulai Rp 120.000</span><span class="poster-card__meta">3 ukuran · 3 bingkai</span></div></div>
+      </a>
+      <a href="/products/retro-wave" class="poster-card stagger-3">
+        <div class="poster-card__image"><div class="poster-card__accent-bar" style="background: var(--gradient-retro);"></div><img src="/posters/retro-wave.svg" alt="Poster Retro Wave" loading="lazy"><div class="poster-card__overlay"><div class="poster-card__actions"><button class="poster-card__action"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg></button><button class="poster-card__action"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg></button></div></div></div>
+        <div class="poster-card__content"><h3 class="poster-card__title">Retro Wave</h3><div class="poster-card__footer"><span class="poster-card__price">Mulai Rp 130.000</span><span class="poster-card__meta">3 ukuran · 3 bingkai</span></div></div>
+      </a>
+      <a href="/products/minimalist-geometry" class="poster-card stagger-4">
+        <div class="poster-card__image"><div class="poster-card__accent-bar" style="background: var(--gradient-minimalis);"></div><img src="/posters/minimalist-geometry.svg" alt="Poster Minimalist Geometry" loading="lazy"><div class="poster-card__overlay"><div class="poster-card__actions"><button class="poster-card__action"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg></button><button class="poster-card__action"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg></button></div></div></div>
+        <div class="poster-card__content"><h3 class="poster-card__title">Minimalist Geometry</h3><div class="poster-card__footer"><span class="poster-card__price">Mulai Rp 110.000</span><span class="poster-card__meta">3 ukuran · 3 bingkai</span></div></div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- CUSTOM CTA -->
+<section class="custom-cta section-lg" aria-labelledby="custom-title">
+  <div class="container">
+    <div class="custom-cta__inner">
+      <div class="custom-cta__blobs" aria-hidden="true"></div>
+      <div class="custom-cta__content">
+        <p class="eyebrow custom-cta__eyebrow">Layanan Custom</p>
+        <h2 id="custom-title" class="custom-cta__title">Punya ide yang belum ada di katalog?</h2>
+        <p class="custom-cta__desc">Kirim brief, pilih gaya dan ukuran. Tim kami akan membuat draf dengan AI, lalu dirapikan manual oleh desainer. Anda hanya membayar setelah menyetujui penawaran harga.</p>
+        <div class="custom-cta__actions">
+          <a href="/custom-order" class="btn btn-secondary btn-lg custom-cta__btn-secondary">Ajukan Custom Order</a>
+          <a href="/custom-order" class="btn btn-lg custom-cta__btn-ghost">Lihat Proses Custom</a>
+        </div>
+        <div class="custom-cta__trust" role="list" aria-label="Keuntungan custom order">
+          <div class="custom-cta__trust-item" role="listitem"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Revisi hingga puas</span></div>
+          <div class="custom-cta__trust-item" role="listitem"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Estimasi 1×24 jam</span></div>
+          <div class="custom-cta__trust-item" role="listitem"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg><span>Desain eksklusif</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- NEWSLETTER -->
+<section class="newsletter section-lg" aria-labelledby="newsletter-title">
+  <div class="container">
+    <header class="newsletter__header animate-slide-up">
+      <p class="eyebrow newsletter__eyebrow">Tetap Terhubung</p>
+      <h2 id="newsletter-title" class="newsletter__title">Dapatkan inspirasi desain & akses eksklusif</h2>
+      <p class="newsletter__desc">Koleksi baru, promo terbatas, dan behind-the-scene proses AI + manusia.</p>
+    </header>
+    <form class="newsletter__form animate-slide-up stagger-1" action="#" method="POST">
+      <input type="email" class="newsletter__input" placeholder="Email Anda" aria-label="Email untuk berlangganan" required>
+      <button type="submit" class="btn btn-primary newsletter__submit">Langganan</button>
+    </form>
+    <p class="newsletter__disclaimer animate-fade-in stagger-2">Tidak ada spam. Hanya hal-hal keren. Batalkan kapan saja.</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="site-footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <a href="/" class="footer__logo" aria-label="PosterAI - Beranda">
+          <span class="footer__logo-text">PosterAI</span>
+          <span class="footer__logo-dot" aria-hidden="true"></span>
+        </a>
+        <p class="footer__desc">Poster yang dimulai oleh model AI, lalu dirapikan tangan manusia sebelum dicetak.</p>
+        <div class="footer__social" role="list" aria-label="Media sosial">
+          <a href="https://instagram.com" class="social-link" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="Instagram"><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
+          <a href="https://twitter.com" class="social-link" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="X (Twitter)"><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+          <a href="https://tiktok.com" class="social-link" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="TikTok"><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12.545 2.163c3.162 0 5.104 2.075 5.73 4.878.092.405.088.823-.014 1.226-.18.698-.64 1.176-1.21 1.359-2.74.877-5.077 2.645-5.63 5.343-.096.473-.538.82-1.01.797-.503-.023-.895-.413-.97-.905-.497-3.248 1.155-6.023 4.09-7.694.5-.287 1.03-.057 1.265.505.196.469-.07.95-.54 1.127C6.874 8.53 4.243 10.86 3.54 14.123c-.12.567.27 1.09.762 1.123.49.03.96-.332 1.08-.845.49-2.07 1.936-3.823 4.15-4.58.616-.21 1.12-.675 1.2-.1.062.43-.303.82-.706.875-.57.078-1.085-.31-1.18-.86C6.77 9.63 5.75 7.34 7.11 5.257c.19-.294.53-.44.827-.37.52.12 2.505.64 5.43.517.533-.022.96-.455.97-.987C13.52 3.85 13.06 2.163 12.545 2.163z"/></svg></a>
+        </div>
+      </div>
+      <nav class="footer__nav" aria-label="Jelajahi">
+        <p class="footer__nav-title">Jelajahi</p>
+        <a href="/products" class="footer__nav-link">Katalog poster</a>
+        <a href="/custom-order" class="footer__nav-link">Custom order</a>
+        <a href="/account/orders" class="footer__nav-link">Pesanan saya</a>
+      </nav>
+      <nav class="footer__nav" aria-label="Bantuan">
+        <p class="footer__nav-title">Bantuan</p>
+        <a href="/faq" class="footer__nav-link">FAQ</a>
+        <a href="/shipping" class="footer__nav-link">Pengiriman</a>
+        <a href="/returns" class="footer__nav-link">Pengembalian</a>
+        <a href="/contact" class="footer__nav-link">Kontak</a>
+      </nav>
+      <nav class="footer__nav" aria-label="Legal">
+        <p class="footer__nav-title">Legal</p>
+        <a href="/privacy" class="footer__nav-link">Kebijakan privasi</a>
+        <a href="/terms" class="footer__nav-link">Syarat & ketentuan</a>
+      </nav>
+      <div class="footer__newsletter">
+        <p class="footer__newsletter-title">Berlangganan</p>
+        <form class="footer__newsletter-form" action="#" method="POST">
+          <div class="footer__newsletter-input-wrapper">
+            <input type="email" class="footer__newsletter-input" placeholder="Email Anda" aria-label="Email untuk berlangganan">
+            <button type="submit" class="footer__newsletter-submit" aria-label="Kirim"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg></button>
+          </div>
+          <p class="footer__newsletter-note">Tidak ada spam. Hanya hal-hal keren.</p>
+        </form>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <div class="container footer__bottom-inner">
+        <p class="footer__copyright">© 2026 PosterAI. Dibuat untuk keperluan akademik.</p>
+        <p class="footer__tech">Next.js 16 · Prisma · Tailwind v4 · TypeScript</p>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</main>
+</body>
+</html>
