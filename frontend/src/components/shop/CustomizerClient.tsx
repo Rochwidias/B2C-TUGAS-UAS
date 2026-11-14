@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Check, ShieldCheck, Sparkles, TriangleAlert, Wrench } from 'lucide-react';
 import { DraftPreview, EngineBadge } from './DraftPreview';
 import {
   PACKAGES,
@@ -50,8 +51,8 @@ const PRESET: Record<string, { brandName: string; tagline: string; description: 
 };
 
 const inputClass =
-  'w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition';
-const labelClass = 'block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5';
+  'w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition';
+const labelClass = 'block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5';
 
 type GenState =
   | { phase: 'idle' }
@@ -215,7 +216,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             <h1 className="text-xl sm:text-2xl font-bold text-white">
               AI Customizer: <span className="text-indigo-400">{template?.name ?? 'Memuat template…'}</span>
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               {template ? `Kategori ${categoryLabel(template.category)} · Template dasar ${formatRupiah(template.base_price)}` : 'Sedang memuat detail template'}
             </p>
           </div>
@@ -230,7 +231,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
           <div className="lg:col-span-5 space-y-6">
             <form onSubmit={generate} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit">
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-                <span className="text-indigo-400" aria-hidden="true">⚙</span>
+                <Wrench className="w-5 h-5 text-indigo-400" aria-hidden="true" />
                 <h2 className="font-bold text-white">Instruksi Modifikasi Bisnis Anda</h2>
               </div>
 
@@ -351,13 +352,13 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                   </>
                 ) : (
                   <>
-                    <span aria-hidden="true">✦</span>
+                    <Sparkles className="w-4 h-4" aria-hidden="true" />
                     <span>Generate Modifikasi AI</span>
                   </>
                 )}
               </button>
 
-              <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
+              <p className="mt-3 text-[11px] text-slate-300 leading-relaxed">
                 Konten dibuat server kami dari brief ini. Bila API key Gemini tidak tersedia, sistem memakai generator
                 lokal deterministik — badge di kanan akan menyatakan asalnya apa adanya.
               </p>
@@ -366,14 +367,14 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             {/* Checkout */}
             <form onSubmit={checkout} className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <h2 className="font-bold text-white mb-1">Checkout &amp; Kirim ke Developer</h2>
-              <p className="text-xs text-slate-500 mb-4">
+              <p className="text-xs text-slate-400 mb-4">
                 {gen.phase === 'done'
                   ? 'Draft siap dikirim. Pilih paket lalu isi kontak Anda.'
                   : 'Generate draft terlebih dahulu untuk mengaktifkan tombol kirim.'}
               </p>
 
               <fieldset className="space-y-3">
-                <legend className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Paket Eksekusi</legend>
+                <legend className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Paket Eksekusi</legend>
                 {PACKAGES.map((p) => {
                   const active = pkg === p.id;
                   return (
@@ -453,7 +454,10 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
               </div>
 
               <div className="mt-4 rounded-xl bg-indigo-950/40 border border-indigo-500/20 p-4 text-xs text-slate-300">
-                <span className="font-bold text-indigo-300 block mb-1">🛡 Garansi eksekusi human developer:</span>
+                <span className="flex items-center gap-1.5 font-bold text-indigo-300 mb-1">
+                  <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
+                  Garansi eksekusi human developer:
+                </span>
                 Draft yang Anda lihat akan dicek, dirapikan source code-nya, dioptimalkan, lalu di-deploy oleh tim kami.
                 Pembayaran pada demo ini bersifat mock.
               </div>
@@ -476,7 +480,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                   </>
                 ) : (
                   <>
-                    <span aria-hidden="true">✓</span>
+                    <Check className="w-5 h-5" aria-hidden="true" />
                     <span>Kirim ke Tim Developer untuk Dikerjakan</span>
                   </>
                 )}
@@ -494,10 +498,10 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             {gen.phase === 'idle' && (
               <div className="bg-slate-950 border border-slate-800 rounded-b-2xl min-h-[520px] flex flex-col items-center justify-center text-center p-8">
                 <span className="text-4xl mb-4" aria-hidden="true">
-                  {template?.emoji ?? '✦'}
+                  template ? template.emoji : <Sparkles className="w-8 h-8 text-indigo-300" aria-hidden="true" />
                 </span>
                 <p className="text-slate-300 font-semibold">Preview akan muncul di sini</p>
-                <p className="text-sm text-slate-500 mt-2 max-w-sm leading-relaxed">
+                <p className="text-sm text-slate-400 mt-2 max-w-sm leading-relaxed">
                   Isi brief di sebelah kiri, lalu tekan <strong className="text-slate-400">Generate Modifikasi AI</strong>.
                   Hasil draft dirender apa adanya dari server.
                 </p>
@@ -520,7 +524,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
             {gen.phase === 'error' && (
               <div role="alert" className="bg-slate-950 border border-rose-500/40 rounded-b-2xl min-h-[520px] flex flex-col items-center justify-center text-center p-8">
-                <span className="text-3xl mb-3" aria-hidden="true">⚠</span>
+                <TriangleAlert className="w-8 h-8 text-rose-300 mb-3" aria-hidden="true" />
                 <p className="text-rose-200 font-semibold">Generate gagal</p>
                 <p className="text-sm text-rose-300/80 mt-2 max-w-md leading-relaxed">{gen.message}</p>
                 <button
@@ -536,7 +540,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             {gen.phase === 'done' && (
               <div data-testid="draft-preview">
                 <DraftPreview draft={gen.content} />
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
                   <span>
                     Draft ID: <span className="font-mono text-slate-400">{gen.draftId}</span>
                   </span>

@@ -23,7 +23,7 @@ export default function LogsTimeline({ logs }: { logs: OrderLog[] }) {
       </div>
 
       {ordered.length === 0 ? (
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+        <p className="mt-3 text-xs leading-relaxed text-slate-400">
           Belum ada riwayat. Entri pertama muncul begitu status order berubah.
         </p>
       ) : (
@@ -44,7 +44,7 @@ export default function LogsTimeline({ logs }: { logs: OrderLog[] }) {
                     {log.status_from && isStatus(log.status_from) ? (
                       <>
                         <StatusBadge status={log.status_from} />
-                        <span aria-hidden="true" className="text-slate-600">
+                        <span aria-hidden="true" className="text-slate-400">
                           →
                         </span>
                       </>
@@ -52,7 +52,7 @@ export default function LogsTimeline({ logs }: { logs: OrderLog[] }) {
                     {isStatus(log.status_to) ? <StatusBadge status={log.status_to} /> : <span>{log.status_to}</span>}
                     <time
                       dateTime={log.timestamp}
-                      className="ml-auto text-[11px] tabular-nums text-slate-500"
+                      className="ml-auto text-[11px] tabular-nums text-slate-400"
                     >
                       {formatDate(log.timestamp)}
                     </time>

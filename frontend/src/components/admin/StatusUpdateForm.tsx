@@ -67,7 +67,7 @@ export default function StatusUpdateForm({ order }: { order: AdminOrder }) {
   return (
     <form onSubmit={submit} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
       <h2 className="text-sm font-semibold tracking-tight text-slate-200">Update status & catatan dev</h2>
-      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+      <p className="mt-1 text-xs leading-relaxed text-slate-400">
         Setiap perubahan status ditulis ke <code className="font-mono text-slate-400">order_logs</code> dan
         langsung terlihat customer di pelacakan pesanan.
       </p>
@@ -111,7 +111,7 @@ export default function StatusUpdateForm({ order }: { order: AdminOrder }) {
             placeholder="Contoh: revisi headline hero sudah diterapkan, tinggal deploy ke Vercel."
             className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-60"
           />
-          <p className="mt-1 text-[11px] text-slate-600">{note.length}/500 karakter</p>
+          <p className="mt-1 text-[11px] text-slate-300">{note.length}/500 karakter</p>
         </div>
       </div>
 

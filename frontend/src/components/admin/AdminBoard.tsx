@@ -80,7 +80,7 @@ export default function AdminBoard() {
           <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
             Papan Pesanan
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-400">
             Seret atau pindahkan kartu antar kolom — setiap perubahan tercatat di riwayat order.
           </p>
         </div>

@@ -76,11 +76,11 @@ export default function KanbanCard({ order }: { order: AdminOrder }) {
       <p className="mt-1.5 truncate text-sm font-medium text-slate-200" title={order.contact_name}>
         {order.contact_name}
       </p>
-      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-slate-500">
+      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-slate-400">
         {order.package_name} · {formatRupiah(order.total_price)}
       </p>
 
-      <dl className="mt-3 space-y-1 border-t border-slate-800 pt-2.5 text-[11px] text-slate-500">
+      <dl className="mt-3 space-y-1 border-t border-slate-800 pt-2.5 text-[11px] text-slate-300">
         <div className="flex justify-between gap-2">
           <dt>WhatsApp</dt>
           <dd className="truncate font-medium text-slate-400">{order.contact_whatsapp}</dd>

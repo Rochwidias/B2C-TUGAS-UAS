@@ -50,7 +50,7 @@ function TrackForm() {
     <>
       <form onSubmit={lookup} className="flex flex-col sm:flex-row gap-3 max-w-xl">
         <div className="flex-1">
-          <label htmlFor="order-number" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+          <label htmlFor="order-number" className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
             Nomor Pesanan
           </label>
           <input
@@ -60,7 +60,7 @@ function TrackForm() {
             value={number}
             onChange={(e) => setNumber(e.target.value)}
             placeholder="UK-ORD-8812"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
           />
         </div>
         <button
@@ -81,7 +81,7 @@ function TrackForm() {
 
       <div className="mt-8" aria-live="polite">
         {state.phase === 'idle' && (
-          <p className="text-sm text-slate-500 border border-dashed border-slate-800 rounded-2xl p-6">
+          <p className="text-sm text-slate-400 border border-dashed border-slate-800 rounded-2xl p-6">
             Belum ada pencarian. Nomor pesanan dikirim ke WhatsApp Anda setelah checkout. Pesanan demo tersedia dengan
             nomor <span className="font-mono text-slate-400">UK-ORD-8812</span>.
           </p>
@@ -164,7 +164,7 @@ export default function OrdersPage() {
           </Link>
         </div>
 
-        <Suspense fallback={<p className="text-sm text-slate-500">Memuat formulir pelacakan…</p>}>
+        <Suspense fallback={<p className="text-sm text-slate-400">Memuat formulir pelacakan…</p>}>
           <TrackForm />
         </Suspense>
       </div>

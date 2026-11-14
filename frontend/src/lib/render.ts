@@ -31,18 +31,52 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// Path SVG per nama ikon (dari Lucide; stroke=2, viewBox 0 0 24 24).
+// Menjaga ikon export tetap SVG, bukan emoji — sama dengan render React.
+const ICON_PATHS: Record<string, string> = {
+  utensils: 'M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7',
+  'map-pin': 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z|M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  'message-circle': 'M7.9 20A9 9 0 1 0 4 16.1L2 22Z',
+  'shopping-bag': 'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z|M3 6h18|M16 10a4 4 0 0 1-8 0',
+  truck: 'M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2|M15 18H9|M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14|M9 18h6|circle 17,18,r2|circle 7,18,r2',
+  lock: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z|M7 11V7a5 5 0 0 1 10 0v4',
+  folders: 'M8 17a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2.4a2 2 0 0 1 1.6.8l.6.8a2 2 0 0 0 1.6.8H20a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2Z|M4 19a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h12.4a2 2 0 0 1 1.6.8l.6.8a2 2 0 0 0 1.6.8H20a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2Z',
+  handshake: 'm11 17 2 2a1 1 0 1 0 3-3|m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4|m21 3 1 11h-2|M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3|M3 4h8',
+  'trending-up': 'M16 7h6v6|M22 7l-8.5 8.5-5-5L2 17',
+  star: 'm12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z',
+  zap: 'M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14Z',
+};
+
+/** SVG inline per nama ikon; fallback: emoji/teks apa adanya (mis. output Gemini). */
+function iconSvg(name: string): string {
+  const paths = ICON_PATHS[name];
+  if (!paths) return escapeHtml(name);
+  const inner = paths
+    .split('|')
+    .map((p) =>
+      p.startsWith('circle ')
+        ? (() => {
+            const [, cx, cy, r] = p.split(/[, ]+/);
+            return `<circle cx="${cx}" cy="${cy}" r="${r}"/>`;
+          })()
+        : `<path d="${p}"/>`,
+    )
+    .join('');
+  return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+}
+
 export function renderDraftToHtml(draft: Draft, templateMeta?: Partial<Template> | null): string {
   const primary = draft.theme.primaryColor;
   const accent = draft.theme.accentColor;
   const onPrimary = readableOn(primary);
   const fontStack = `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`;
   const templateName = templateMeta?.name ?? 'Template CraftAI Studio';
-  const emoji = templateMeta?.emoji ?? '✨';
+  const brandIcon = iconSvg('star');
 
   const featuresHtml = draft.features
     .map(
       (feature) => `      <article class="card">
-        <span class="card-icon" aria-hidden="true">${escapeHtml(feature.icon)}</span>
+        <span class="card-icon" aria-hidden="true">${iconSvg(feature.icon)}</span>
         <h3>${escapeHtml(feature.title)}</h3>
         <p>${escapeHtml(feature.description)}</p>
       </article>`,
@@ -101,7 +135,7 @@ export function renderDraftToHtml(draft: Draft, templateMeta?: Partial<Template>
   .brand-mark span.dot {
     width: 34px; height: 34px; border-radius: 10px;
     background: linear-gradient(135deg, var(--primary), var(--accent));
-    display: grid; place-items: center; font-size: 1rem;
+    display: grid; place-items: center;
     color: var(--on-primary);
   }
   .nav-links { display: flex; gap: 1.4rem; font-size: 0.9rem; color: var(--muted); }
@@ -143,8 +177,9 @@ export function renderDraftToHtml(draft: Draft, templateMeta?: Partial<Template>
   .card:hover { border-color: var(--primary); transform: translateY(-3px); }
   .card-icon {
     display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px;
-    background: var(--primary-soft); font-size: 1.3rem; margin-bottom: 0.9rem;
+    background: var(--primary-soft); color: var(--primary); margin-bottom: 0.9rem;
   }
+  .icon { width: 24px; height: 24px; }
   .card h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
   .card p { margin: 0; color: var(--muted); font-size: 0.94rem; }
   .faq-item {
@@ -180,7 +215,7 @@ export function renderDraftToHtml(draft: Draft, templateMeta?: Partial<Template>
 <body>
 <header class="site">
   <div class="container nav">
-    <div class="brand-mark"><span class="dot" aria-hidden="true">${escapeHtml(emoji)}</span>${escapeHtml(draft.brand.name)}</div>
+    <div class="brand-mark"><span class="dot" aria-hidden="true">${brandIcon}</span>${escapeHtml(draft.brand.name)}</div>
     <nav class="nav-links" aria-label="Navigasi utama">
       <a href="#fitur">Fitur</a>
       <a href="#faq">FAQ</a>

@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState, type FormEvent } from 'react';
+import { Sparkles } from 'lucide-react';
 
 function LoginForm() {
   const router = useRouter();
@@ -57,7 +58,7 @@ function LoginForm() {
           aria-describedby="password-hint"
           className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-60"
         />
-        <p id="password-hint" className="mt-1.5 text-xs text-slate-500">
+        <p id="password-hint" className="mt-1.5 text-xs text-slate-400">
           Password demo: <span className="font-mono text-indigo-300">admin123</span>
         </p>
       </div>
@@ -84,23 +85,23 @@ export default function AdminLoginPage() {
         <div className="mb-6 flex flex-col items-center text-center">
           <span
             aria-hidden="true"
-            className="grid size-11 place-items-center rounded-xl bg-indigo-500 text-xl text-white shadow-lg shadow-indigo-500/30"
+            className="grid size-11 place-items-center rounded-xl bg-indigo-500 text-white shadow-lg shadow-indigo-500/30"
           >
-            ✦
+            <Sparkles className="size-5" aria-hidden="true" />
           </span>
           <h1 className="mt-4 text-xl font-semibold tracking-tight text-white">CraftAI Studio</h1>
-          <p className="mt-1 text-sm text-slate-500">Masuk ke back office developer & admin</p>
+          <p className="mt-1 text-sm text-slate-400">Masuk ke back office developer & admin</p>
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 sm:p-6">
-          <Suspense fallback={<p className="text-sm text-slate-500">Memuat formulir…</p>}>
+          <Suspense fallback={<p className="text-sm text-slate-400">Memuat formulir…</p>}>
             <LoginForm />
           </Suspense>
         </div>
 
-        <p className="mt-5 text-center text-xs leading-relaxed text-slate-600">
+        <p className="mt-5 text-center text-xs leading-relaxed text-slate-400">
           Akses dibatasi untuk tim internal. Sesi disimpan lewat cookie{' '}
-          <code className="font-mono text-slate-500">admin_session</code>.
+          <code className="font-mono text-slate-400">admin_session</code>.
         </p>
       </div>
     </div>

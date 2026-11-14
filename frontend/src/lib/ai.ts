@@ -77,9 +77,9 @@ function detectTopic(brief: DraftBrief): TopicModel {
       usp: 'bahan pilihan, resep turun-temurun, dan pelayanan yang membuat pelanggan betah berlama-lama',
       hours: extractHours(brief.description),
       features: [
-        { icon: '🍽️', title: 'Menu Andalan Setiap Hari', description: `Menu pilihan dari ${name} yang diracik dari bahan segar, konsisten dari kunjungan pertama sampai kesekian.` },
-        { icon: '📍', title: 'Lokasi & Jam Buka Jelas', description: `Alamat dan jam operasional ${name} ditampilkan di halaman depan agar pelanggan tidak salah datang.` },
-        { icon: '💬', title: 'Reservasi lewat WhatsApp', description: `Pesan meja atau pesan antar langsung dari tombol WhatsApp tanpa perlu aplikasi tambahan.` },
+        { icon: 'utensils', title: 'Menu Andalan Setiap Hari', description: `Menu pilihan dari ${name} yang diracik dari bahan segar, konsisten dari kunjungan pertama sampai kesekian.` },
+        { icon: 'map-pin', title: 'Lokasi & Jam Buka Jelas', description: `Alamat dan jam operasional ${name} ditampilkan di halaman depan agar pelanggan tidak salah datang.` },
+        { icon: 'message-circle', title: 'Reservasi lewat WhatsApp', description: `Pesan meja atau pesan antar langsung dari tombol WhatsApp tanpa perlu aplikasi tambahan.` },
       ],
     };
   }
@@ -91,9 +91,9 @@ function detectTopic(brief: DraftBrief): TopicModel {
       offering: 'produk unggulan dengan stok yang selalu diperbarui',
       usp: 'foto jujur, harga transparan, dan pengiriman yang dipantau sampai sampai ke tangan pembeli',
       features: [
-        { icon: '🛍️', title: 'Katalog Produk Lengkap', description: `Produk unggulan ${name} dengan foto jujur, harga transparan, dan stok yang selalu diperbarui.` },
-        { icon: '🚚', title: 'Pengiriman Ke Seluruh Indonesia', description: `Pesanan diproses cepat dan dikirim lewat ekspedisi pilihan, nomor resi dikirim otomatis via WhatsApp.` },
-        { icon: '🔒', title: 'Checkout Aman & Konfirmasi Cepat', description: `Pembayaran diproses aman dan pesanan dikonfirmasi langsung oleh tim ${name} dalam hitungan menit.` },
+        { icon: 'shopping-bag', title: 'Katalog Produk Lengkap', description: `Produk unggulan ${name} dengan foto jujur, harga transparan, dan stok yang selalu diperbarui.` },
+        { icon: 'truck', title: 'Pengiriman Ke Seluruh Indonesia', description: `Pesanan diproses cepat dan dikirim lewat ekspedisi pilihan, nomor resi dikirim otomatis via WhatsApp.` },
+        { icon: 'lock', title: 'Checkout Aman & Konfirmasi Cepat', description: `Pembayaran diproses aman dan pesanan dikonfirmasi langsung oleh tim ${name} dalam hitungan menit.` },
       ],
     };
   }
@@ -105,9 +105,9 @@ function detectTopic(brief: DraftBrief): TopicModel {
       offering: 'layanan dan karya yang bisa dilihat langsung',
       usp: 'proses kerja transparan, komunikasi rapi, dan hasil yang diukur dari tujuan bisnis klien',
       features: [
-        { icon: '🗂️', title: 'Karya & Studi Kasus', description: `Portofolio ${name} berisi karya terpilih beserta konteks masalah dan hasil yang dicapai klien.` },
-        { icon: '🤝', title: 'Proses Kerja Transparan', description: `Setiap tahap proyek dikomunikasikan dengan jadwal dan ruang lingkup yang disepakati di awal.` },
-        { icon: '📈', title: 'Hasil Terukur', description: `Pekerjaan dievaluasi dari indikator yang disepakati klien, bukan sekadar tampilan yang enak dilihat.` },
+        { icon: 'folders', title: 'Karya & Studi Kasus', description: `Portofolio ${name} berisi karya terpilih beserta konteks masalah dan hasil yang dicapai klien.` },
+        { icon: 'handshake', title: 'Proses Kerja Transparan', description: `Setiap tahap proyek dikomunikasikan dengan jadwal dan ruang lingkup yang disepakati di awal.` },
+        { icon: 'trending-up', title: 'Hasil Terukur', description: `Pekerjaan dievaluasi dari indikator yang disepakati klien, bukan sekadar tampilan yang enak dilihat.` },
       ],
     };
   }
@@ -118,9 +118,9 @@ function detectTopic(brief: DraftBrief): TopicModel {
     offering: 'layanan unggulan dengan tim yang siap membantu',
     usp: 'komunikasi cepat, harga transparan, dan hasil yang bisa dipertanggungjawabkan',
     features: [
-      { icon: '⭐', title: 'Layanan Unggulan', description: `Andalan dari ${name} yang dikerjakan dengan standar kualitas konsisten dan bisa diminta kapan saja.` },
-      { icon: '🤝', title: 'Konsultasi Gratis', description: `Bicarakan kebutuhan Anda dulu dengan tim ${name} sebelum memutuskan — tanpa biaya, tanpa tekanan.` },
-      { icon: '⚡', title: 'Respon Cepat', description: `Pertanyaan dan pesanan dijawab lewat WhatsApp pada jam kerja, rata-rata dalam beberapa menit.` },
+      { icon: 'star', title: 'Layanan Unggulan', description: `Andalan dari ${name} yang dikerjakan dengan standar kualitas konsisten dan bisa diminta kapan saja.` },
+      { icon: 'handshake', title: 'Konsultasi Gratis', description: `Bicarakan kebutuhan Anda dulu dengan tim ${name} sebelum memutuskan — tanpa biaya, tanpa tekanan.` },
+      { icon: 'zap', title: 'Respon Cepat', description: `Pertanyaan dan pesanan dijawab lewat WhatsApp pada jam kerja, rata-rata dalam beberapa menit.` },
     ],
   };
 }

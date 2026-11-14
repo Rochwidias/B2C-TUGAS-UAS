@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import { STATUS_STEPS, type OrderStatus, type OrderLog } from './types';
 
 function fmt(ts: string): string {
@@ -25,27 +26,27 @@ export function Stepper({ status, logs }: { status: OrderStatus; logs?: OrderLog
                   'w-9 h-9 rounded-full flex items-center justify-center mb-2 font-bold text-sm border',
                   state === 'done' && 'bg-emerald-500 text-slate-950 border-emerald-400',
                   state === 'active' && 'bg-indigo-600 text-white border-indigo-400 ring-2 ring-indigo-500/40',
-                  state === 'pending' && 'bg-slate-800 text-slate-500 border-slate-700',
+                  state === 'pending' && 'bg-slate-800 text-slate-400 border-slate-700',
                 ]
                   .filter(Boolean)
                   .join(' ')}
                 aria-hidden="true"
               >
-                {state === 'done' ? '✓' : i + 1}
+                {state === 'done' ? <Check className="w-4 h-4" aria-hidden="true" /> : i + 1}
               </span>
               <span
                 className={[
                   'font-semibold',
                   state === 'done' && 'text-emerald-400',
                   state === 'active' && 'text-indigo-300',
-                  state === 'pending' && 'text-slate-500',
+                  state === 'pending' && 'text-slate-400',
                 ]
                   .filter(Boolean)
                   .join(' ')}
               >
                 {step.label}
               </span>
-              <span className="text-[10px] text-slate-500 mt-0.5">
+              <span className="text-[10px] text-slate-300 mt-0.5">
                 {noteByStep.has(step.key) ? noteByStep.get(step.key) : step.hint}
               </span>
             </li>
@@ -59,7 +60,7 @@ export function Stepper({ status, logs }: { status: OrderStatus; logs?: OrderLog
           <ul className="space-y-2">
             {logs.map((log) => (
               <li key={log.id} className="text-xs text-slate-400 flex flex-wrap gap-x-2 items-baseline">
-                <span className="font-mono text-slate-500">{fmt(log.timestamp)}</span>
+                <span className="font-mono text-slate-400">{fmt(log.timestamp)}</span>
                 <span className="text-slate-300">
                   {log.status_from ? `${log.status_from} → ` : ''}
                   {log.status_to}

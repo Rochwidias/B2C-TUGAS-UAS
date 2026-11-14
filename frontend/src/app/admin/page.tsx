@@ -13,7 +13,7 @@ export default function AdminDashboardPage() {
     <AdminShell>
       <Suspense
         fallback={
-          <p className="text-sm text-slate-500">Memuat papan pesanan…</p>
+          <p className="text-sm text-slate-400">Memuat papan pesanan…</p>
         }
       >
         <AdminBoard />

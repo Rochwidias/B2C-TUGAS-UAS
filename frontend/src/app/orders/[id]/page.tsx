@@ -30,7 +30,7 @@ export default function OrderDetailPage() {
           <div className="bg-slate-950 text-slate-100 flex-1">
             <div className="max-w-5xl mx-auto px-4 py-14" aria-busy="true">
               <div className="h-7 w-56 bg-slate-800 rounded animate-pulse" />
-              <p className="text-sm text-slate-500 mt-4">Memuat detail pesanan…</p>
+              <p className="text-sm text-slate-400 mt-4">Memuat detail pesanan…</p>
             </div>
           </div>
           <Footer />
@@ -84,7 +84,7 @@ function OrderDetailInner() {
         <div className="h-7 w-56 bg-slate-800 rounded animate-pulse" />
         <div className="h-4 w-80 bg-slate-800 rounded mt-3 animate-pulse" />
         <div className="h-40 bg-slate-900 border border-slate-800 rounded-2xl mt-6 animate-pulse" />
-        <p className="text-sm text-slate-500 mt-4">Memuat detail pesanan…</p>
+        <p className="text-sm text-slate-400 mt-4">Memuat detail pesanan…</p>
       </div>
     );
   }
@@ -128,7 +128,7 @@ function OrderDetailInner() {
               </span>
               <span>Website {order.contact_name}</span>
             </h1>
-            <p className="text-xs text-slate-500 mt-2">
+            <p className="text-xs text-slate-400 mt-2">
               {state.templateName ? `Template dasar: ${state.templateName} · ` : ''}
               Paket {order.package_name} · {formatRupiah(order.total_price)} · Pembayaran {order.payment_status === 'paid' ? 'lunas' : 'belum lunas'}
             </p>
@@ -193,7 +193,7 @@ function OrderDetailInner() {
             </div>
 
             {!completed && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-400">
                 Tombol live URL &amp; unduh source code aktif setelah pesanan berstatus <strong className="text-slate-400">completed</strong>.
               </p>
             )}
@@ -219,7 +219,7 @@ function OrderDetailInner() {
           <section className="mt-8" aria-label="Preview draft AI">
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
               <h2 className="text-lg font-bold text-white">Preview draft AI</h2>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-slate-400">
                 Draft ID <span className="font-mono text-slate-400">{draft?.id}</span>
               </span>
             </div>

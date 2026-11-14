@@ -23,6 +23,37 @@ body {
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Hormati prefers-reduced-motion: matikan animasi & transisi dekoratif
+   (WCAG 2.3.3; checklist ui-ux-pro-max). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Kursor jelas di seluruh elemen interaktif (checklist: cursor-pointer). */
+button,
+a,
+[role='button'],
+select,
+input[type='checkbox'],
+input[type='radio'],
+label[for] {
+  cursor: pointer;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled,
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* Fokus keyboard terlihat jelas di seluruh komponen (aksesibilitas). */
 :focus-visible {
   outline: 2px solid #6366f1;

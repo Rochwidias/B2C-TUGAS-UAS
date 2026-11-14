@@ -30,7 +30,7 @@ export default function AdminOrderDetailPage() {
     <Suspense
       fallback={
         <AdminShell>
-          <p className="text-sm text-slate-500" aria-busy="true">
+          <p className="text-sm text-slate-400" aria-busy="true">
             Memuat detail order…
           </p>
         </AdminShell>
@@ -100,7 +100,7 @@ function AdminOrderDetailInner() {
           <div className="h-8 w-64 animate-pulse rounded bg-slate-800" />
           <div className="h-40 animate-pulse rounded-2xl bg-slate-900/70" />
           <div className="h-64 animate-pulse rounded-2xl bg-slate-900/70" />
-          <p className="text-sm text-slate-500">Memuat detail order…</p>
+          <p className="text-sm text-slate-400">Memuat detail order…</p>
         </div>
       </AdminShell>
     );
@@ -143,7 +143,7 @@ function AdminOrderDetailInner() {
 
   return (
     <AdminShell>
-      <nav aria-label="Remah roti" className="mb-4 text-xs text-slate-500">
+      <nav aria-label="Remah roti" className="mb-4 text-xs text-slate-400">
         <Link href="/admin" className="rounded transition hover:text-indigo-300">
           Papan Pesanan
         </Link>
@@ -167,26 +167,26 @@ function AdminOrderDetailInner() {
               {order.payment_status === 'paid' ? 'Sudah dibayar' : 'Belum dibayar'}
             </span>
           </p>
-          <p className="mt-0.5 text-xs text-slate-600">
+          <p className="mt-0.5 text-xs text-slate-400">
             Dibuat {formatDate(order.created_at)} · Diperbarui {formatDate(order.updated_at)}
           </p>
         </div>
 
         <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
           <div>
-            <dt className="text-slate-600">Customer</dt>
+            <dt className="text-slate-400">Customer</dt>
             <dd className="font-medium text-slate-300">{order.contact_name}</dd>
           </div>
           <div>
-            <dt className="text-slate-600">WhatsApp</dt>
+            <dt className="text-slate-400">WhatsApp</dt>
             <dd className="font-medium text-slate-300">{order.contact_whatsapp}</dd>
           </div>
           <div>
-            <dt className="text-slate-600">Email</dt>
+            <dt className="text-slate-400">Email</dt>
             <dd className="font-medium text-slate-300">{order.contact_email}</dd>
           </div>
           <div>
-            <dt className="text-slate-600">Live URL</dt>
+            <dt className="text-slate-400">Live URL</dt>
             <dd className="font-medium">
               {order.live_website_url ? (
                 <a
@@ -198,7 +198,7 @@ function AdminOrderDetailInner() {
                   {order.live_website_url}
                 </a>
               ) : (
-                <span className="text-slate-500">belum tersedia</span>
+                <span className="text-slate-400">belum tersedia</span>
               )}
             </dd>
           </div>
@@ -213,36 +213,36 @@ function AdminOrderDetailInner() {
           {brief ? (
             <dl className="mt-3 space-y-2.5 text-sm">
               <div className="flex gap-3">
-                <dt className="w-32 shrink-0 text-xs text-slate-600">Brand</dt>
+                <dt className="w-32 shrink-0 text-xs text-slate-400">Brand</dt>
                 <dd className="text-slate-300">{brief.brandName}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-32 shrink-0 text-xs text-slate-600">Tagline</dt>
+                <dt className="w-32 shrink-0 text-xs text-slate-400">Tagline</dt>
                 <dd className="text-slate-300">{brief.tagline}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-32 shrink-0 text-xs text-slate-600">Deskripsi</dt>
+                <dt className="w-32 shrink-0 text-xs text-slate-400">Deskripsi</dt>
                 <dd className="text-slate-300">{brief.description}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-32 shrink-0 text-xs text-slate-600">Warna tema</dt>
+                <dt className="w-32 shrink-0 text-xs text-slate-400">Warna tema</dt>
                 <dd className="text-slate-300 capitalize">{brief.themeColor}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-32 shrink-0 text-xs text-slate-600">CTA</dt>
+                <dt className="w-32 shrink-0 text-xs text-slate-400">CTA</dt>
                 <dd className="text-slate-300">{brief.ctaText}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-32 shrink-0 text-xs text-slate-600">Tone of voice</dt>
+                <dt className="w-32 shrink-0 text-xs text-slate-400">Tone of voice</dt>
                 <dd className="text-slate-300">{brief.toneOfVoice}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-32 shrink-0 text-xs text-slate-600">Template</dt>
+                <dt className="w-32 shrink-0 text-xs text-slate-400">Template</dt>
                 <dd className="font-mono text-xs text-slate-400">{brief.templateId}</dd>
               </div>
             </dl>
           ) : (
-            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            <p className="mt-3 text-xs leading-relaxed text-slate-400">
               Brief tidak tersimpan untuk order ini.
             </p>
           )}
@@ -280,12 +280,12 @@ function AdminOrderDetailInner() {
                 />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-slate-200">{content.brand.name}</p>
-                  <p className="truncate text-xs text-slate-500">{content.brand.tagline}</p>
+                  <p className="truncate text-xs text-slate-400">{content.brand.tagline}</p>
                 </div>
               </div>
 
               <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                <p className="text-[11px] uppercase tracking-wider text-slate-600">Hero</p>
+                <p className="text-[11px] uppercase tracking-wider text-slate-300">Hero</p>
                 <p className="mt-1 text-base font-semibold leading-snug text-slate-100">
                   {content.heroSection.headline}
                 </p>
@@ -298,11 +298,11 @@ function AdminOrderDetailInner() {
               </div>
 
               <div>
-                <p className="text-[11px] uppercase tracking-wider text-slate-600">Fitur (3)</p>
+                <p className="text-[11px] uppercase tracking-wider text-slate-300">Fitur (3)</p>
                 <ul className="mt-1.5 space-y-1.5">
                   {content.features.map((feature) => (
                     <li key={feature.title} className="flex gap-2 text-xs leading-relaxed text-slate-400">
-                      <span aria-hidden="true" className="text-slate-600">
+                      <span aria-hidden="true" className="text-slate-400">
                         {feature.icon}
                       </span>
                       <span>
@@ -315,19 +315,19 @@ function AdminOrderDetailInner() {
               </div>
 
               <div>
-                <p className="text-[11px] uppercase tracking-wider text-slate-600">FAQ (2)</p>
+                <p className="text-[11px] uppercase tracking-wider text-slate-300">FAQ (2)</p>
                 <dl className="mt-1.5 space-y-1.5">
                   {content.faq.map((item) => (
                     <div key={item.q} className="rounded-lg bg-slate-950/50 px-3 py-2">
                       <dt className="text-xs font-medium text-slate-300">{item.q}</dt>
-                      <dd className="mt-0.5 text-xs leading-relaxed text-slate-500">{item.a}</dd>
+                      <dd className="mt-0.5 text-xs leading-relaxed text-slate-400">{item.a}</dd>
                     </div>
                   ))}
                 </dl>
               </div>
             </div>
           ) : (
-            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            <p className="mt-3 text-xs leading-relaxed text-slate-400">
               Draft AI belum tersedia untuk order ini.
             </p>
           )}

@@ -65,7 +65,7 @@ export default function DeliveryForm({ order }: { order: AdminOrder }) {
   return (
     <form onSubmit={submit} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
       <h2 className="text-sm font-semibold tracking-tight text-slate-200">Form delivery</h2>
-      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+      <p className="mt-1 text-xs leading-relaxed text-slate-400">
         Isi setelah site di-deploy. Kosongkan bila belum siap — tombol customer tetap nonaktif sampai
         status <span className="text-slate-400">Completed</span>.
       </p>
@@ -87,7 +87,7 @@ export default function DeliveryForm({ order }: { order: AdminOrder }) {
             disabled={busy}
             placeholder="https://artisan-cafe.craftaistudio.my.id"
             aria-invalid={!validLive}
-            className={`w-full rounded-lg border bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 transition focus:outline-none focus:ring-2 ${
+            className={`w-full rounded-lg border bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
               validLive
                 ? 'border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/40'
                 : 'border-rose-500/60 focus:border-rose-400 focus:ring-rose-500/40'
@@ -114,7 +114,7 @@ export default function DeliveryForm({ order }: { order: AdminOrder }) {
             disabled={busy}
             placeholder="https://cdn.craftaistudio.my.id/export/UK-ORD-8812.zip"
             aria-invalid={!validZip}
-            className={`w-full rounded-lg border bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 transition focus:outline-none focus:ring-2 ${
+            className={`w-full rounded-lg border bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
               validZip
                 ? 'border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/40'
                 : 'border-rose-500/60 focus:border-rose-400 focus:ring-rose-500/40'

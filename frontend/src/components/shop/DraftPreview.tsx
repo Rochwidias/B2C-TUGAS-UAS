@@ -1,3 +1,4 @@
+import { DraftIcon } from './DraftIcon';
 import type { Draft } from './types';
 
 // Ditenagai AI (gemini) atau generator lokal — keduanya mengikuti skema draft
@@ -61,7 +62,7 @@ export function DraftPreview({ draft }: { draft: Draft }) {
             </span>
             <span className="font-bold text-lg text-white truncate">{brand.name}</span>
           </div>
-          <span className="hidden sm:block text-xs font-mono text-slate-500 shrink-0">{theme.fontPairing}</span>
+          <span className="hidden sm:block text-xs font-mono text-slate-400 shrink-0">{theme.fontPairing}</span>
         </div>
 
         <div className="py-8 sm:py-10 text-center max-w-lg mx-auto">
@@ -93,11 +94,11 @@ export function DraftPreview({ draft }: { draft: Draft }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-slate-800/80 pt-6">
           {features.map((f) => (
             <div key={f.title} className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
-              <div className="text-lg" aria-hidden="true">
-                {f.icon}
+              <div className="flex justify-center">
+                <DraftIcon name={f.icon} className="w-5 h-5 text-slate-200" />
               </div>
               <div className="text-xs font-bold text-white mt-1">{f.title}</div>
-              <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">{f.description}</div>
+              <div className="text-[11px] text-slate-300 mt-0.5 leading-snug">{f.description}</div>
             </div>
           ))}
         </div>

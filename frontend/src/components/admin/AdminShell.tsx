@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
+import { Sparkles } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/admin', label: 'Papan Kanban' },
@@ -22,9 +23,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           >
             <span
               aria-hidden="true"
-              className="grid size-8 place-items-center rounded-lg bg-indigo-500 text-base text-white shadow-lg shadow-indigo-500/30"
+              className="grid size-8 place-items-center rounded-lg bg-indigo-500 text-white shadow-lg shadow-indigo-500/30"
             >
-              ✦
+              <Sparkles className="size-4" aria-hidden="true" />
             </span>
             CraftAI Studio
             <span className="rounded-md bg-slate-800 px-2 py-0.5 text-xs font-medium text-indigo-300 ring-1 ring-slate-700">
@@ -38,7 +39,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             <AdminNav />
           </Suspense>
 
-          <p className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+          <p className="ml-auto flex items-center gap-2 text-xs text-slate-400">
             <span aria-hidden="true" className="size-2 rounded-full bg-emerald-400" />
             Sesi admin aktif
           </p>

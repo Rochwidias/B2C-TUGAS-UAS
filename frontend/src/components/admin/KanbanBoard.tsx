@@ -30,7 +30,7 @@ export default function KanbanBoard({ columns }: { columns: KanbanColumns }) {
                 {orders.length}
               </span>
             </header>
-            <p className="mb-3 px-0.5 text-[11px] uppercase tracking-wider text-slate-600">
+            <p className="mb-3 px-0.5 text-[11px] uppercase tracking-wider text-slate-300">
               {meta.hint}
             </p>
 
