@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CraftAI Studio - B2C AI-Assisted Website Template Service</title>
+  <!-- Tailwind CSS CDN & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.05); }
+    }
+    .glow-bg {
+      animation: pulseGlow 6s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+
+  <!-- Top Navigation -->
+  <header class="sticky top-0 z-50 backdrop-blur-md bg-slate-900/80 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="navigateTo('home')">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <i data-lucide="sparkles" class="w-5 h-5 text-white"></i>
+        </div>
+        <span class="font-bold text-xl tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">CraftAI Studio</span>
+      </div>
+
+      <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
+        <a href="#how-it-works" class="hover:text-white transition">Cara Kerja</a>
+        <a href="#catalog" class="hover:text-white transition">Pilihan Template</a>
+        <a href="#orders" class="hover:text-white transition" onclick="navigateTo('orders')">Pesanan Saya</a>
+      </nav>
+
+      <div class="flex items-center space-x-3">
+        <button onclick="navigateTo('orders')" class="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 transition flex items-center gap-2">
+          <i data-lucide="shopping-bag" class="w-4 h-4 text-indigo-400"></i>
+          <span>Tracking Order</span>
+          <span id="order-badge" class="ml-1 px-1.5 py-0.5 text-xs bg-indigo-600 rounded-full font-bold">1</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="flex-1">
+
+    <!-- VIEW 1: HOME & CATALOG -->
+    <section id="view-home" class="block">
+      <!-- Hero Section -->
+      <div class="relative overflow-hidden pt-16 pb-20 lg:pt-24 lg:pb-28">
+        <div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[350px] bg-gradient-to-tr from-indigo-600/30 via-violet-600/20 to-pink-500/20 blur-[120px] rounded-full pointer-events-none glow-bg"></div>
+        <div class="max-w-4xl mx-auto px-4 text-center relative z-10">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 mb-6">
+            <i data-lucide="wand-2" class="w-3.5 h-3.5 text-indigo-400"></i>
+            Kombinasi Otomatisasi AI & Sentuhan Human Developer
+          </div>
+          <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
+            Pilih Template. <span class="bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">AI Modifikasi</span>. Kami yang Eksekusi.
+          </h1>
+          <p class="mt-6 text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            Tak perlu pusing coding atau desain dari nol. Pilih template, ketik instruksi bisnis Anda, saksikan AI mengubahnya secara instan, dan tim kami akan menyempurnakannya sampai live online!
+          </p>
+          <div class="mt-8 flex flex-wrap justify-center gap-4">
+            <a href="#catalog" class="px-6 py-3.5 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
+              <span>Jelajahi Template</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </a>
+            <a href="#how-it-works" class="px-6 py-3.5 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+              Lihat Alur Kerja
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- How it Works Section -->
+      <section id="how-it-works" class="py-16 bg-slate-900/50 border-y border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="text-center max-w-2xl mx-auto mb-12">
+            <h2 class="text-2xl sm:text-3xl font-bold text-white">Alur Pengerjaan Kami</h2>
+            <p class="mt-2 text-slate-400">Transparan, cepat, dan berstandar profesional.</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 relative">
+              <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-lg mb-4">1</div>
+              <h3 class="font-bold text-lg text-white mb-2">Pilih Template</h3>
+              <p class="text-sm text-slate-400">Pilih fondasi desain website yang cocok dengan kategori bisnis Anda.</p>
+            </div>
+            <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 relative">
+              <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-lg mb-4">2</div>
+              <h3 class="font-bold text-lg text-white mb-2">AI Modification</h3>
+              <p class="text-sm text-slate-400">Ketik brief nama toko, produk, dan warna. AI mengkustomisasi konten dalam hitungan detik.</p>
+            </div>
+            <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 relative">
+              <div class="w-10 h-10 rounded-xl bg-pink-500/20 text-pink-400 flex items-center justify-center font-bold text-lg mb-4">3</div>
+              <h3 class="font-bold text-lg text-white mb-2">Checkout & Request</h3>
+              <p class="text-sm text-slate-400">Kirim draft ke tim eksekusi kami dengan catatan revisi spesifik.</p>
+            </div>
+            <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 relative">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg mb-4">4</div>
+              <h3 class="font-bold text-lg text-white mb-2">Human Polish & Live</h3>
+              <p class="text-sm text-slate-400">Developer kami memeriksa kode, deploy ke domain, dan menyerahkan hasil final ke Anda.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Template Catalog -->
+      <section id="catalog" class="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
+          <div>
+            <h2 class="text-3xl font-extrabold text-white">Koleksi Template Pilihan</h2>
+            <p class="mt-2 text-slate-400">Pilih template awal yang paling relevan dengan kebutuhan bisnis customer.</p>
+          </div>
+          <!-- Filter Tabs -->
+          <div class="flex flex-wrap gap-2">
+            <button class="px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 text-white">Semua</button>
+            <button class="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700">Kuliner / Cafe</button>
+            <button class="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700">Portofolio & Agensi</button>
+            <button class="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700">Toko Online / Retail</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" id="template-grid">
+          <!-- Template Card 1 -->
+          <div class="group bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden hover:border-slate-700 transition flex flex-col">
+            <div class="h-48 bg-gradient-to-tr from-amber-900/40 to-orange-950/40 p-4 relative flex items-center justify-center border-b border-slate-800">
+              <span class="text-5xl">☕</span>
+              <span class="absolute top-3 left-3 bg-amber-500/20 text-amber-300 text-xs font-bold px-2.5 py-1 rounded-md border border-amber-500/30">Kuliner & F&B</span>
+              <span class="absolute bottom-3 right-3 text-xs bg-slate-950/80 px-2.5 py-1 rounded-md text-slate-300">Biaya: Rp 250.000</span>
+            </div>
+            <div class="p-6 flex-1 flex flex-col justify-between">
+              <div>
+                <h3 class="font-bold text-lg text-white group-hover:text-indigo-400 transition">Artisan Cafe & Resto</h3>
+                <p class="mt-2 text-sm text-slate-400">Cocok untuk kedai kopi, bistro, atau rumah makan modern lengkap dengan menu catalog dan booking meja.</p>
+              </div>
+              <button onclick="openCustomizer('Artisan Cafe & Resto', 'fnb')" class="mt-6 w-full py-2.5 rounded-xl font-medium bg-slate-800 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-indigo-500/30 hover:border-indigo-600 transition flex items-center justify-center gap-2">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                <span>Kustomisasi dengan AI</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Template Card 2 -->
+          <div class="group bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden hover:border-slate-700 transition flex flex-col">
+            <div class="h-48 bg-gradient-to-tr from-blue-900/40 to-indigo-950/40 p-4 relative flex items-center justify-center border-b border-slate-800">
+              <span class="text-5xl">💼</span>
+              <span class="absolute top-3 left-3 bg-blue-500/20 text-blue-300 text-xs font-bold px-2.5 py-1 rounded-md border border-blue-500/30">Portofolio & Agensi</span>
+              <span class="absolute bottom-3 right-3 text-xs bg-slate-950/80 px-2.5 py-1 rounded-md text-slate-300">Biaya: Rp 300.000</span>
+            </div>
+            <div class="p-6 flex-1 flex flex-col justify-between">
+              <div>
+                <h3 class="font-bold text-lg text-white group-hover:text-indigo-400 transition">Modern Creative Portfolio</h3>
+                <p class="mt-2 text-sm text-slate-400">Template showcase karya desainer, fotografer, software engineer, atau konsultan digital.</p>
+              </div>
+              <button onclick="openCustomizer('Modern Creative Portfolio', 'portfolio')" class="mt-6 w-full py-2.5 rounded-xl font-medium bg-slate-800 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-indigo-500/30 hover:border-indigo-600 transition flex items-center justify-center gap-2">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                <span>Kustomisasi dengan AI</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Template Card 3 -->
+          <div class="group bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden hover:border-slate-700 transition flex flex-col">
+            <div class="h-48 bg-gradient-to-tr from-emerald-900/40 to-teal-950/40 p-4 relative flex items-center justify-center border-b border-slate-800">
+              <span class="text-5xl">🛍️</span>
+              <span class="absolute top-3 left-3 bg-emerald-500/20 text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-md border border-emerald-500/30">Toko Online UMKM</span>
+              <span class="absolute bottom-3 right-3 text-xs bg-slate-950/80 px-2.5 py-1 rounded-md text-slate-300">Biaya: Rp 350.000</span>
+            </div>
+            <div class="p-6 flex-1 flex flex-col justify-between">
+              <div>
+                <h3 class="font-bold text-lg text-white group-hover:text-indigo-400 transition">Direct-to-Consumer Store</h3>
+                <p class="mt-2 text-sm text-slate-400">Landing page produk unggulan dengan integrasi checkout WhatsApp otomatis.</p>
+              </div>
+              <button onclick="openCustomizer('Direct-to-Consumer Store', 'shop')" class="mt-6 w-full py-2.5 rounded-xl font-medium bg-slate-800 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-indigo-500/30 hover:border-indigo-600 transition flex items-center justify-center gap-2">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                <span>Kustomisasi dengan AI</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- VIEW 2: AI CUSTOMIZER WIZARD -->
+    <section id="view-customizer" class="hidden py-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Breadcrumb & Title -->
+      <div class="flex items-center justify-between pb-6 border-b border-slate-800 mb-6">
+        <div>
+          <button onclick="navigateTo('home')" class="text-xs font-semibold text-slate-400 hover:text-white flex items-center gap-1 mb-2">
+            <i data-lucide="chevron-left" class="w-4 h-4"></i> Kembali ke Katalog
+          </button>
+          <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+            <span>AI Customizer:</span>
+            <span id="customizer-template-name" class="text-indigo-400">Nama Template</span>
+          </h2>
+        </div>
+        <div class="text-right">
+          <span class="text-xs text-slate-400">Estimasi Paket Eksekusi</span>
+          <p class="text-xl font-bold text-emerald-400">Rp 250.000</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <!-- Input Form (Left 5 Cols) -->
+        <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit">
+          <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
+            <i data-lucide="sliders" class="w-5 h-5 text-indigo-400"></i>
+            <h3 class="font-bold text-white">Instruksi Modifikasi Bisnis Anda</h3>
+          </div>
+
+          <form id="ai-customizer-form" onsubmit="event.preventDefault(); triggerAiGenerate();" class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Nama Brand / Bisnis</label>
+              <input type="text" id="input-brand-name" value="Kopi Senja Utama" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Slogan / Tagline Singkat</label>
+              <input type="text" id="input-tagline" value="Rasa Otentik Kopi Nusantara di Jantung Kota" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Deskripsi & Nilai Tambah (AI Prompt Brief)</label>
+              <textarea id="input-description" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">Kami menyajikan biji kopi single origin roast medium-dark dengan suasana nyaman untuk nugas dan santai. Buka tiap hari 08.00 - 23.00.</textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Warna Aksen</label>
+                <select id="input-theme-color" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+                  <option value="amber">Warm Amber & Coffee</option>
+                  <option value="indigo">Tech Indigo & Blue</option>
+                  <option value="emerald">Fresh Emerald & Green</option>
+                  <option value="rose">Elegant Rose & Pink</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Tombol Aksi Utama</label>
+                <input type="text" id="input-cta" value="Pesan Meja Sekarang" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+              </div>
+            </div>
+
+            <!-- Submit AI Generate Button -->
+            <button type="submit" id="btn-generate-ai" class="w-full py-3 rounded-xl font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+              <span>Generate Modifikasi AI</span>
+            </button>
+          </form>
+
+          <!-- Order Action Box -->
+          <div class="mt-6 pt-6 border-t border-slate-800">
+            <div class="bg-indigo-950/40 border border-indigo-500/20 rounded-xl p-4 mb-4 text-xs text-slate-300">
+              <span class="font-bold text-indigo-300 block mb-1">🛡️ Garansi Eksekusi Human Developer:</span>
+              Draft yang Anda lihat akan dicek, dirapikan source code-nya, dioptimalkan kecepatannya, dan dideploy oleh tim kami.
+            </div>
+            <button onclick="submitOrderToDev()" class="w-full py-3.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20">
+              <i data-lucide="check-circle" class="w-5 h-5"></i>
+              <span>Kirim ke Tim Developer untuk Dikerjakan</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Preview Canvas (Right 7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col">
+          <div class="flex items-center justify-between bg-slate-900 px-4 py-2.5 rounded-t-2xl border-t border-x border-slate-800">
+            <div class="flex items-center space-x-2">
+              <div class="w-3 h-3 rounded-full bg-red-500/80"></div>
+              <div class="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+              <div class="w-3 h-3 rounded-full bg-green-500/80"></div>
+              <span class="text-xs text-slate-400 ml-2 font-mono">Live AI Preview Canvas</span>
+            </div>
+            <div id="ai-status-indicator" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Ready
+            </div>
+          </div>
+
+          <!-- Preview Frame -->
+          <div id="preview-frame" class="bg-slate-950 border border-slate-800 rounded-b-2xl p-6 min-h-[520px] flex flex-col justify-between transition-all duration-300">
+            <!-- Simulated Website Header -->
+            <div class="border-b border-slate-800/80 pb-4 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div id="pv-logo-icon" class="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white font-bold">☕</div>
+                <span id="pv-brand" class="font-bold text-lg text-white">Kopi Senja Utama</span>
+              </div>
+              <div class="hidden sm:flex items-center space-x-4 text-xs text-slate-400">
+                <span>Beranda</span>
+                <span>Menu Unggulan</span>
+                <span>Lokasi</span>
+              </div>
+            </div>
+
+            <!-- Simulated Hero Content -->
+            <div class="py-12 text-center max-w-lg mx-auto">
+              <span id="pv-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 inline-block mb-4">
+                Pilihan Terbaik Kota Anda
+              </span>
+              <h2 id="pv-headline" class="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
+                Rasa Otentik Kopi Nusantara di Jantung Kota
+              </h2>
+              <p id="pv-desc" class="mt-4 text-sm text-slate-300 leading-relaxed">
+                Kami menyajikan biji kopi single origin roast medium-dark dengan suasana nyaman untuk nugas dan santai. Buka tiap hari 08.00 - 23.00.
+              </p>
+              <div class="mt-6 flex justify-center gap-3">
+                <button id="pv-cta" class="px-5 py-2.5 rounded-xl font-bold text-sm bg-amber-600 text-white shadow-lg transition">
+                  Pesan Meja Sekarang
+                </button>
+                <button class="px-5 py-2.5 rounded-xl font-medium text-sm bg-slate-900 border border-slate-800 text-slate-300">
+                  Lihat Menu
+                </button>
+              </div>
+            </div>
+
+            <!-- Simulated Features Grid -->
+            <div class="grid grid-cols-3 gap-3 border-t border-slate-800/80 pt-6 text-center">
+              <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
+                <div class="text-lg">⭐</div>
+                <div class="text-xs font-bold text-white mt-1">Single Origin</div>
+                <div class="text-[10px] text-slate-400">Biji pilihan nusantara</div>
+              </div>
+              <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
+                <div class="text-lg">📶</div>
+                <div class="text-xs font-bold text-white mt-1">High-Speed WiFi</div>
+                <div class="text-[10px] text-slate-400">Cocok untuk WFC</div>
+              </div>
+              <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
+                <div class="text-lg">🥐</div>
+                <div class="text-xs font-bold text-white mt-1">Fresh Bakery</div>
+                <div class="text-[10px] text-slate-400">Dipanggang setiap hari</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: ORDER TRACKING & EXECUTION DASHBOARD -->
+    <section id="view-orders" class="hidden py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between mb-8 pb-4 border-b border-slate-800">
+        <div>
+          <h2 class="text-3xl font-extrabold text-white">Status Pengerjaan Pesanan</h2>
+          <p class="text-sm text-slate-400 mt-1">Pantau proses dari draft AI hingga tim kami selesai mengeksekusi website Anda.</p>
+        </div>
+        <button onclick="navigateTo('home')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-medium text-slate-200 border border-slate-700 transition">
+          + Buat Pesanan Baru
+        </button>
+      </div>
+
+      <!-- Orders List Container -->
+      <div class="space-y-6" id="order-container">
+        <!-- Order Card Example -->
+        <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div>
+              <div class="flex items-center gap-3">
+                <span class="text-xs font-mono px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 font-bold">ORD-2026-8812</span>
+                <h3 class="font-bold text-lg text-white">Website Kopi Senja Utama</h3>
+              </div>
+              <p class="text-xs text-slate-400 mt-1">Template Dasar: Artisan Cafe & Resto | Dipesan: Hari ini, 13:30 WIB</p>
+            </div>
+            <div>
+              <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                Sedang Dikerjakan Developer (Eksekusi Final)
+              </span>
+            </div>
+          </div>
+
+          <!-- Progress Stepper -->
+          <div class="py-6">
+            <div class="grid grid-cols-4 gap-2 text-center text-xs">
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 font-bold flex items-center justify-center mb-2">✓</div>
+                <span class="text-emerald-400 font-semibold">1. AI Drafting</span>
+                <span class="text-[10px] text-slate-500">Selesai</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 font-bold flex items-center justify-center mb-2">✓</div>
+                <span class="text-emerald-400 font-semibold">2. Order Masuk</span>
+                <span class="text-[10px] text-slate-500">Terverifikasi</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center mb-2 animate-pulse">3</div>
+                <span class="text-indigo-300 font-semibold">3. Eksekusi Tim</span>
+                <span class="text-[10px] text-slate-400">Polish Code & Deploy</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full bg-slate-800 text-slate-500 font-bold flex items-center justify-center mb-2">4</div>
+                <span class="text-slate-500 font-semibold">4. Live Delivery</span>
+                <span class="text-[10px] text-slate-600">Pending</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Developer Notes / Delivery Box -->
+          <div class="bg-slate-950 rounded-xl p-4 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p class="text-xs font-bold text-slate-300">Catatan dari Tim Developer:</p>
+              <p class="text-xs text-slate-400 mt-0.5">"Struktur AI sudah kami ambil. Kami sedang mengoptimasi gambar produk dan setting domain kustom. Estimasi selesai: 2 jam lagi."</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 border border-slate-700 transition">
+                Hubungi Admin
+              </button>
+              <button disabled class="px-3.5 py-2 rounded-lg bg-slate-800 text-xs font-semibold text-slate-600 cursor-not-allowed">
+                Akses Live URL
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-slate-950 border-t border-slate-900 py-8 text-center text-xs text-slate-500">
+    <p>© 2026 CraftAI Studio - Platform B2C Pembuatan Website Berbasis AI & Human Execution (Tugas UAS).</p>
+  </footer>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-3">
+    <i data-lucide="check" class="w-5 h-5 text-emerald-400"></i>
+    <span id="toast-message" class="text-sm">Notifikasi</span>
+  </div>
+
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // Navigation Switcher
+    function navigateTo(viewName) {
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-customizer').classList.add('hidden');
+      document.getElementById('view-orders').classList.add('hidden');
+
+      if (viewName === 'home') {
+        document.getElementById('view-home').classList.remove('hidden');
+      } else if (viewName === 'customizer') {
+        document.getElementById('view-customizer').classList.remove('hidden');
+      } else if (viewName === 'orders') {
+        document.getElementById('view-orders').classList.remove('hidden');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Open Customizer for a specific template
+    function openCustomizer(templateName, category) {
+      document.getElementById('customizer-template-name').innerText = templateName;
+      if (category === 'fnb') {
+        document.getElementById('input-brand-name').value = 'Kopi Senja Utama';
+        document.getElementById('input-tagline').value = 'Rasa Otentik Kopi Nusantara di Jantung Kota';
+        document.getElementById('input-cta').value = 'Pesan Meja Sekarang';
+      } else if (category === 'portfolio') {
+        document.getElementById('input-brand-name').value = 'Dimas Studio & Design';
+        document.getElementById('input-tagline').value = 'Crafting Digital Experiences that Convert';
+        document.getElementById('input-cta').value = 'Hire Me / Lihat Karya';
+      } else if (category === 'shop') {
+        document.getElementById('input-brand-name').value = 'UrbanStreet Wear';
+        document.getElementById('input-tagline').value = 'Fashion Streetwear Lokal Berkualitas Dunia';
+        document.getElementById('input-cta').value = 'Beli via WhatsApp';
+      }
+      triggerAiGenerate();
+      navigateTo('customizer');
+    }
+
+    // AI Generation Simulation
+    function triggerAiGenerate() {
+      const btn = document.getElementById('btn-generate-ai');
+      const statusIndicator = document.getElementById('ai-status-indicator');
+      const brand = document.getElementById('input-brand-name').value;
+      const tagline = document.getElementById('input-tagline').value;
+      const desc = document.getElementById('input-description').value;
+      const color = document.getElementById('input-theme-color').value;
+      const cta = document.getElementById('input-cta').value;
+
+      // Loading State
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>AI sedang memodifikasi konten...</span>`;
+      statusIndicator.className = "text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-medium flex items-center gap-1.5";
+      statusIndicator.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>Sedang Generate...`;
+      lucide.createIcons();
+
+      setTimeout(() => {
+        // Update Canvas with AI output
+        document.getElementById('pv-brand').innerText = brand;
+        document.getElementById('pv-headline').innerText = tagline;
+        document.getElementById('pv-desc').innerText = desc;
+        document.getElementById('pv-cta').innerText = cta;
+
+        // Apply theme color
+        const ctaBtn = document.getElementById('pv-cta');
+        const logoIcon = document.getElementById('pv-logo-icon');
+        const badge = document.getElementById('pv-badge');
+
+        if (color === 'amber') {
+          ctaBtn.className = "px-5 py-2.5 rounded-xl font-bold text-sm bg-amber-600 text-white shadow-lg";
+          logoIcon.className = "w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white font-bold";
+          badge.className = "px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 inline-block mb-4";
+        } else if (color === 'indigo') {
+          ctaBtn.className = "px-5 py-2.5 rounded-xl font-bold text-sm bg-indigo-600 text-white shadow-lg";
+          logoIcon.className = "w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold";
+          badge.className = "px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 inline-block mb-4";
+        } else if (color === 'emerald') {
+          ctaBtn.className = "px-5 py-2.5 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow-lg";
+          logoIcon.className = "w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold";
+          badge.className = "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 inline-block mb-4";
+        } else if (color === 'rose') {
+          ctaBtn.className = "px-5 py-2.5 rounded-xl font-bold text-sm bg-rose-600 text-white shadow-lg";
+          logoIcon.className = "w-8 h-8 rounded-lg bg-rose-600 flex items-center justify-center text-white font-bold";
+          badge.className = "px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30 inline-block mb-4";
+        }
+
+        // Restore Button State
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="sparkles" class="w-4 h-4"></i><span>Generate Modifikasi AI</span>`;
+        statusIndicator.className = "text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium flex items-center gap-1.5";
+        statusIndicator.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span>Modifikasi Selesai!`;
+        lucide.createIcons();
+
+        showToast("✨ AI berhasil menyesuaikan template dengan brief bisnis Anda!");
+      }, 700);
+    }
+
+    // Submit Order to Developer Team
+    function submitOrderToDev() {
+      const brand = document.getElementById('input-brand-name').value;
+      const orderContainer = document.getElementById('order-container');
+      const randomId = 'ORD-2026-' + Math.floor(1000 + Math.random() * 9000);
+
+      const newOrderCard = `
+        <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 animate-fade-in">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div>
+              <div class="flex items-center gap-3">
+                <span class="text-xs font-mono px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 font-bold">${randomId}</span>
+                <h3 class="font-bold text-lg text-white">Website ${brand}</h3>
+              </div>
+              <p class="text-xs text-slate-400 mt-1">Dipesan: Baru saja | Status: Masuk Antrean Developer</p>
+            </div>
+            <div>
+              <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                Diterima Tim Developer (Queue)
+              </span>
+            </div>
+          </div>
+          <div class="py-6">
+            <div class="grid grid-cols-4 gap-2 text-center text-xs">
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 font-bold flex items-center justify-center mb-2">✓</div>
+                <span class="text-emerald-400 font-semibold">1. AI Drafting</span>
+                <span class="text-[10px] text-slate-500">Selesai</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 font-bold flex items-center justify-center mb-2">✓</div>
+                <span class="text-emerald-400 font-semibold">2. Order Masuk</span>
+                <span class="text-[10px] text-slate-500">Terverifikasi</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full bg-amber-500 text-slate-950 font-bold flex items-center justify-center mb-2 animate-bounce">3</div>
+                <span class="text-amber-400 font-semibold">3. Eksekusi Tim</span>
+                <span class="text-[10px] text-slate-400">Dalam Pengerjaan</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="w-8 h-8 rounded-full bg-slate-800 text-slate-500 font-bold flex items-center justify-center mb-2">4</div>
+                <span class="text-slate-500 font-semibold">4. Live Delivery</span>
+                <span class="text-[10px] text-slate-600">Pending</span>
+              </div>
+            </div>
+          </div>
+          <div class="bg-slate-950 rounded-xl p-4 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p class="text-xs font-bold text-slate-300">Catatan dari Tim Developer:</p>
+              <p class="text-xs text-slate-400 mt-0.5">"Order baru diterima! Developer kami sedang mengintegrasikan kode modifikasi AI ke hosting server."</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 border border-slate-700 transition">
+                Hubungi Admin
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      orderContainer.insertAdjacentHTML('afterbegin', newOrderCard);
+      showToast("🚀 Pesanan berhasil dikirim ke tim developer!");
+      navigateTo('orders');
+    }
+
+    // Toast Notification Utility
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-message');
+      toastMsg.innerText = message;
+      toast.classList.remove('translate-y-24', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-24', 'opacity-0');
+      }, 3500);
+    }
+  </script>
+</body>
+</html>
