@@ -14,51 +14,52 @@ export default function LogsTimeline({ logs }: { logs: OrderLog[] }) {
   );
 
   return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold tracking-tight text-slate-200">Riwayat order</h2>
-        <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">
-          {ordered.length} entri
-        </span>
+    <section aria-labelledby="riwayat-order" className="relative border border-rule bg-surface">
+      <div className="flex items-center justify-between gap-3 border-b border-rule px-3 py-2">
+        <h2 id="riwayat-order" className="text-xs font-semibold tracking-tight text-ink">
+          Riwayat order
+        </h2>
+        <span className="font-mono text-[10px] text-ink-soft">{ordered.length} entri</span>
       </div>
 
       {ordered.length === 0 ? (
-        <p className="mt-3 text-xs leading-relaxed text-slate-400">
-          Belum ada riwayat. Entri pertama muncul begitu status order berubah.
+        <p className="px-3 py-4 text-[11px] leading-relaxed text-ink-soft">
+          Belum ada riwayat. Entri pertama muncul begitu status order berubah lewat form di samping.
         </p>
       ) : (
-        <ol className="mt-4 space-y-0">
+        <ol className="px-3 py-3">
           {ordered.map((log, index) => {
             const last = index === ordered.length - 1;
             return (
-              <li key={log.id} className="relative flex gap-3 pb-4 last:pb-0">
+              <li key={log.id} className="relative flex gap-2.5 pb-3.5 last:pb-0">
                 {!last ? (
-                  <span aria-hidden="true" className="absolute left-[7px] top-4 h-full w-px bg-slate-800" />
+                  <span aria-hidden="true" className="absolute top-3.5 left-[5px] h-full w-px bg-rule" />
                 ) : null}
-                <span
-                  aria-hidden="true"
-                  className="relative z-10 mt-1 size-3.5 shrink-0 rounded-full border-2 border-slate-900 bg-indigo-500"
-                />
+                <span aria-hidden="true" className="relative z-10 mt-1 size-[11px] shrink-0 border-[1.5px] border-ink bg-paper" />
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {log.status_from && isStatus(log.status_from) ? (
                       <>
                         <StatusBadge status={log.status_from} />
-                        <span aria-hidden="true" className="text-slate-400">
+                        <span aria-hidden="true" className="font-mono text-[10px] text-ink-soft">
                           →
                         </span>
                       </>
                     ) : null}
-                    {isStatus(log.status_to) ? <StatusBadge status={log.status_to} /> : <span>{log.status_to}</span>}
+                    {isStatus(log.status_to) ? (
+                      <StatusBadge status={log.status_to} />
+                    ) : (
+                      <span className="font-mono text-[10px] text-ink-soft">{log.status_to}</span>
+                    )}
                     <time
                       dateTime={log.timestamp}
-                      className="ml-auto text-[11px] tabular-nums text-slate-400"
+                      className="ml-auto font-mono text-[10px] tabular-nums text-ink-soft"
                     >
                       {formatDate(log.timestamp)}
                     </time>
                   </div>
                   {log.developer_note ? (
-                    <p className="mt-1.5 rounded-lg bg-slate-950/70 px-3 py-2 text-xs leading-relaxed text-slate-400">
+                    <p className="mt-1.5 border-l-[1.5px] border-rule pl-2 text-[11px] leading-relaxed text-ink-soft">
                       {log.developer_note}
                     </p>
                   ) : null}

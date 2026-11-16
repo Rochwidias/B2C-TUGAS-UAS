@@ -8,7 +8,8 @@ import sys
 import urllib.request
 import urllib.error
 
-BASE = "http://localhost:3000"
+import os
+BASE = os.environ.get("BASE_URL", "http://localhost:3000")
 results = []
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
 

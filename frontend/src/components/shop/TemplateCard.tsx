@@ -1,46 +1,54 @@
 import Link from 'next/link';
-import { Sparkles } from 'lucide-react';
 import { type Template, categoryLabel, formatRupiah } from './types';
 
-// preview_gradient disimpan sebagai utility Tailwind penuh (contoh:
-// "from-amber-900/40 to-orange-950/40") sehingga class-nya tetap terbaca
-// scanner Tailwind.
-const GRADIENT_PREFIX = 'bg-gradient-to-tr ';
-
+// Kartu katalog = kartu cetak: permukaan terang, garis 1px, bayangan keras yang
+// bergeser saat hover (MOTION 2, tanpa blur). Panah hanya di kartu ini karena
+// satu-satunya aksi kartu adalah berpindah halaman (R-08).
 export function TemplateCard({ template }: { template: Template }) {
-  const gradient = template.preview_gradient.startsWith('bg-')
-    ? template.preview_gradient
-    : `${GRADIENT_PREFIX}${template.preview_gradient}`;
-
   return (
-    <article className="group bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden hover:border-slate-700 transition flex flex-col h-full">
+    <article className="group relative flex h-full flex-col border border-rule bg-surface transition-transform duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--ink)]">
+      {/* preview_gradient adalah CSS gradient dari DB; dipakai apa adanya. */}
       <div
-        className={`h-44 ${gradient} p-4 relative flex items-center justify-center border-b border-slate-800`}
+        className="h-20 border-b border-rule"
+        style={{ backgroundImage: template.preview_gradient }}
       >
-        <span className="text-5xl" aria-hidden="true">
-          {template.emoji}
-        </span>
-        <span className="absolute top-3 left-3 bg-slate-950/80 text-slate-200 text-xs font-bold px-2.5 py-1 rounded-md border border-slate-700">
-          {categoryLabel(template.category)}
-        </span>
-        <span className="absolute bottom-3 right-3 text-xs bg-slate-950/80 px-2.5 py-1 rounded-md text-slate-300 font-mono">
-          {formatRupiah(template.base_price)}
-        </span>
+        <span className="sr-only">{`Pita warna template ${template.name}`}</span>
       </div>
-      <div className="p-6 flex-1 flex flex-col justify-between">
-        <div>
-          <h3 className="font-bold text-lg text-white group-hover:text-indigo-400 transition">
-            {template.name}
-          </h3>
-          <p className="mt-2 text-sm text-slate-400 leading-relaxed">{template.description}</p>
+
+      <div className="flex flex-1 flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 font-mono text-[10px] text-ink-soft">
+          <span className="border border-rule px-1.5 py-0.5 uppercase tracking-wide">
+            {categoryLabel(template.category)}
+          </span>
+          <span>{template.id}</span>
         </div>
-        <Link
-          href={`/customizer/${template.id}`}
-          className="mt-6 w-full py-2.5 rounded-xl font-medium bg-slate-800 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-indigo-500/30 hover:border-indigo-600 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
-        >
-          <Sparkles className="w-4 h-4" aria-hidden="true" />
-          <span>Kustomisasi dengan AI</span>
-        </Link>
+
+        <div className="flex flex-col gap-2">
+          <h3 className="text-[22px] font-semibold leading-tight tracking-tight">
+            {/* Satu link untuk seluruh kartu: pseudo-elemen `after` membentang
+                ke seluruh kartu (posisi absolut terhadap <article>), sementara
+                link itu sendiri tetap setinggi 44px supaya target sentuh cukup.
+                Pola ini menghindari dua link untuk tujuan yang sama. */}
+            <Link
+              href={`/customizer/${template.id}`}
+              className="inline-flex min-h-11 items-center hover:underline after:absolute after:inset-0 after:content-['']"
+            >
+              {template.name}
+            </Link>
+          </h3>
+          <p className="text-[13px] leading-relaxed text-ink-soft">{template.description}</p>
+        </div>
+
+        <div className="mt-auto flex flex-col gap-3 border-t border-rule pt-4">
+          <p className="flex items-baseline justify-between gap-2 text-[13px]">
+            <span className="text-ink-soft">Harga template</span>
+            <span className="font-mono">{formatRupiah(template.base_price)}</span>
+          </p>
+          <span className="inline-flex min-h-11 items-center justify-between gap-2 border border-rule bg-paper px-3 text-[13px] font-medium transition-colors group-hover:border-ink group-hover:bg-ink group-hover:text-paper">
+            <span>Kustomisasi dengan AI</span>
+            <span aria-hidden="true">&rarr;</span>
+          </span>
+        </div>
       </div>
     </article>
   );

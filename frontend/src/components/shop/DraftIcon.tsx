@@ -7,7 +7,6 @@ import {
   MapPin,
   MessageCircle,
   ShoppingBag,
-  Sparkles,
   Star,
   TrendingUp,
   Truck,
@@ -16,8 +15,9 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-// Icon pada draft dulunya emoji; sekarang nama ikon agar konsisten dengan
-// checklist ui-ux-pro-max (SVG, bukan emoji) dan tetap terwarnai currentColor.
+// Nama ikon pada draft (mis. "utensils", "map-pin") dipetakan ke SVG garis.
+// Emoji tidak dipakai sebagai ikon di UI mana pun (larangan DESIGN.md).
+// Nilai tak dikenal dirender apa adanya sebagai teks, bukan ikon rusak.
 const ICONS: Record<string, LucideIcon> = {
   utensils: Utensils,
   'map-pin': MapPin,
@@ -37,9 +37,11 @@ const ICONS: Record<string, LucideIcon> = {
 export function DraftIcon({ name, className }: { name: string; className?: string }) {
   const Icon = ICONS[name];
   if (Icon) return <Icon className={className} aria-hidden="true" />;
+  // Nilai kosong tidak menghasilkan glyph apa pun; label fitur tetap membawa arti.
+  if (!name) return null;
   return (
     <span className={className} aria-hidden="true">
-      {name || <Sparkles className={className} />}
+      {name}
     </span>
   );
 }

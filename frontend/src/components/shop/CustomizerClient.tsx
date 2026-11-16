@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { Check, ShieldCheck, Sparkles, TriangleAlert, Wrench } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useToast } from '@/components/ui/Toast';
 import { DraftPreview, EngineBadge } from './DraftPreview';
 import {
   PACKAGES,
@@ -18,6 +18,30 @@ import {
   formatRupiah,
   readJson,
 } from './types';
+import { API_BASE } from '@/lib/api';
+
+// Batas karakter brief. Dipakai bersama oleh validasi, penghitung, dan
+// placeholder supaya angka maksimum hanya ditulis di satu tempat.
+const DESC_MIN = 20;
+const DESC_MAX = 800;
+const BRAND_MIN = 2;
+
+function briefKey(templateId: string): string {
+  return `craftai-brief-${templateId}`;
+}
+
+// Draft brief disimpan di localStorage supaya formulir yang sudah diisi tidak
+// hilang saat pindah halaman atau menutup tab.
+function loadBriefDraft(templateId: string): Partial<Brief> | null {
+  try {
+    const raw = localStorage.getItem(briefKey(templateId));
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Partial<Brief>) : null;
+  } catch {
+    return null;
+  }
+}
 
 const THEME_OPTIONS: { value: ThemeColorKey; label: string }[] = [
   { value: 'amber', label: 'Warm Amber & Coffee' },
@@ -28,7 +52,8 @@ const THEME_OPTIONS: { value: ThemeColorKey; label: string }[] = [
 
 const TONE_OPTIONS = ['Profesional', 'Santai & ramah', 'Energik & muda', 'Elegan & premium'];
 
-// Prefill per kategori — brief contoh yang masuk akal untuk bisnis itu.
+// Prefill per kategori: contoh brief yang masuk akal untuk bisnis itu, bukan
+// data pelanggan sungguhan. Kolom tetap bisa dikosongkan.
 const PRESET: Record<string, { brandName: string; tagline: string; description: string; ctaText: string }> = {
   fnb: {
     brandName: 'Kopi Senja Utama',
@@ -51,8 +76,14 @@ const PRESET: Record<string, { brandName: string; tagline: string; description: 
 };
 
 const inputClass =
-  'w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition';
-const labelClass = 'block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5';
+  'w-full min-h-11 border border-rule bg-paper px-3 py-2 text-sm text-ink transition-colors placeholder:text-ink-soft/70 focus:border-ink focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const labelClass = 'mb-1.5 block font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft';
+
+// Kelas input dengan status validasi: garis danger + ikon saat field sudah
+// disentuh tapi masih berisi kesalahan.
+function fieldClass(invalid: boolean): string {
+  return invalid ? `${inputClass} border-danger` : inputClass;
+}
 
 type GenState =
   | { phase: 'idle' }
@@ -75,7 +106,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     brandName: '',
     tagline: '',
     description: '',
-    themeColor: 'indigo',
+    themeColor: 'amber',
     ctaText: '',
     toneOfVoice: 'Profesional',
   });
@@ -84,10 +115,77 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
   const [order, setOrder] = useState<OrderState>({ phase: 'idle' });
   const [pkg, setPkg] = useState('pro');
   const [contact, setContact] = useState({ name: '', whatsapp: '', email: '' });
+  // true setelah pengguna menyentuh sebuah field; pesan validasi baru muncul
+  // setelah itu supaya formulir tidak terlihat "merah" sebelum diisi.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const toast = useToast();
+
+
+  // Simpan draft setiap kali brief berubah (debounce ringan) agar tidak hilang.
+  // Simpanan terakhir WAJIB di-flush saat unmount, bukan dibatalkan, supaya
+  // draft yang diketik tepat sebelum pindah halaman tidak hilang.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const briefRef = useRef(brief);
+
+  // Ref hanya untuk dibaca di handler unmount/visibilitychange, jadi
+  // penugasannya dilakukan di effect (bukan saat render).
+  useEffect(() => {
+    briefRef.current = brief;
+  }, [brief]);
+
+  const flushDraft = () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    try {
+      localStorage.setItem(briefKey(templateId), JSON.stringify(briefRef.current));
+    } catch {
+      // Penyimpanan diblokir (mode privat): abaikan, formulir tetap berfungsi.
+    }
+  };
+
+  useEffect(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      try {
+        localStorage.setItem(briefKey(templateId), JSON.stringify(brief));
+      } catch {
+        // Penyimpanan diblokir (mode privat): abaikan, formulir tetap berfungsi.
+      }
+    }, 300);
+    return () => {
+      // Unmount: tulis nilai terakhir yang sudah menempel di ref.
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      try {
+        localStorage.setItem(briefKey(templateId), JSON.stringify(briefRef.current));
+      } catch {
+        // Penyimpanan diblokir: abaikan.
+      }
+    };
+  }, [brief, templateId]);
+
+  // Simpan juga ketika tab disembunyikan/ditutup: debounce bisa belum jalan.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flushDraft();
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flushDraft);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flushDraft);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId]);
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/templates')
+    fetch(`${API_BASE}/api/templates`)
       .then((res) => readJson<{ templates: Template[] }>(res))
       .then((result) => {
         if (!alive) return;
@@ -101,19 +199,28 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
           return;
         }
         setTemplate(found);
-        // Isi contoh brief hanya sekali per template dan hanya bila belum ada
-        // ketikan user, supaya navigasi ulang / generate ulang tidak pernah
-        // menimpa atau menggabung isi form customer.
+        // Pulihkan draft tersimpan hanya untuk kolom yang masih kosong, lalu
+        // isi preset template bila kolom tetap kosong. Satu updater, satu render.
+        const saved = loadBriefDraft(templateId);
         setBrief((prev) => {
-          const untouched = Object.values({
-            brandName: prev.brandName,
-            tagline: prev.tagline,
-            description: prev.description,
-            ctaText: prev.ctaText,
-          }).every((value) => value.trim() === '');
-          if (!untouched || prev.templateId === templateId) return prev;
+          const filled = (v: string | undefined) => typeof v === 'string' && v.trim() !== '';
+          const restored = saved
+            ? {
+                ...prev,
+                brandName: filled(prev.brandName) ? prev.brandName : saved.brandName ?? prev.brandName,
+                tagline: filled(prev.tagline) ? prev.tagline : saved.tagline ?? prev.tagline,
+                description: filled(prev.description) ? prev.description : saved.description ?? prev.description,
+                ctaText: filled(prev.ctaText) ? prev.ctaText : saved.ctaText ?? prev.ctaText,
+                themeColor: saved.themeColor ?? prev.themeColor,
+                toneOfVoice: saved.toneOfVoice ?? prev.toneOfVoice,
+              }
+            : prev;
+          const untouched = [restored.brandName, restored.tagline, restored.description, restored.ctaText].every(
+            (value) => value.trim() === '',
+          );
+          if (!untouched || prev.templateId === templateId) return restored;
           const preset = PRESET[found.category] ?? PRESET.fnb;
-          return { ...prev, ...preset };
+          return { ...restored, ...preset };
         });
       })
       .catch(() => alive && setTemplateError('Tidak bisa terhubung ke server.'));
@@ -124,14 +231,51 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
   function update<K extends keyof Brief>(key: K, value: Brief[K]) {
     setBrief((prev) => ({ ...prev, [key]: value }));
+    setTouched((prev) => ({ ...prev, [key]: true }));
   }
+
+  const descLength = brief.description.trim().length;
+
+  // Validasi per field mengikuti batas yang ditampilkan ke pengguna. Dipakai
+  // untuk menonaktifkan tombol Generate dan menampilkan pesan Bahasa Indonesia.
+  const errors = useMemo(() => {
+    const e: Record<string, string> = {};
+    const brand = brief.brandName.trim();
+    if (!brand) e.brandName = 'Nama brand wajib diisi.';
+    else if (brand.length < BRAND_MIN)
+      e.brandName = `Nama brand minimal ${BRAND_MIN} karakter (sekarang ${brand.length}).`;
+    if (!brief.tagline.trim()) e.tagline = 'Tagline wajib diisi.';
+    const desc = brief.description.trim();
+    if (!desc) e.description = 'Deskripsi wajib diisi.';
+    else if (desc.length < DESC_MIN)
+      e.description = `Deskripsi minimal ${DESC_MIN} karakter (sekarang ${desc.length}).`;
+    else if (desc.length > DESC_MAX)
+      e.description = `Deskripsi maksimal ${DESC_MAX} karakter (sekarang ${desc.length}).`;
+    if (!brief.ctaText.trim()) e.ctaText = 'Teks tombol (CTA) wajib diisi.';
+    if (!brief.toneOfVoice.trim()) e.toneOfVoice = 'Pilih nada penulisan.';
+    return e;
+  }, [brief]);
+
+  const briefValid = Object.keys(errors).length === 0;
 
   // dipakai baik sebagai submit handler maupun tombol "coba lagi"
   async function generate(e: { preventDefault: () => void }) {
     e.preventDefault();
+    // Tandai semua field tersentuh agar pesan validasi tampil saat submit diblokir.
+    setTouched({
+      brandName: true,
+      tagline: true,
+      description: true,
+      ctaText: true,
+      toneOfVoice: true,
+    });
+    if (!briefValid) {
+      toast.error('Brief belum lengkap', 'Periksa kembali kolom yang ditandai merah.');
+      return;
+    }
     setGen({ phase: 'loading' });
     try {
-      const res = await fetch('/api/drafts', {
+      const res = await fetch(`${API_BASE}/api/drafts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(brief),
@@ -139,6 +283,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
       const result = await readJson<DraftResponse>(res);
       if (!result.ok) {
         setGen({ phase: 'error', message: result.error });
+        toast.error('Draft gagal dibuat', result.error);
         return;
       }
       setGen({
@@ -147,8 +292,15 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
         content: result.data.content,
         engine: result.data.engine,
       });
+      toast.success(
+        'Draft berhasil dibuat',
+        result.data.engine === 'gemini'
+          ? 'Disusun oleh Gemini.'
+          : 'Disusun oleh generator lokal.',
+      );
     } catch {
       setGen({ phase: 'error', message: 'Jaringan terputus saat menghubungi server. Coba lagi.' });
+      toast.error('Tidak bisa terhubung', 'Periksa koneksi Anda lalu coba lagi.');
     }
   }
 
@@ -157,16 +309,18 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     if (gen.phase !== 'done') return;
     if (!contact.name.trim() || !contact.whatsapp.trim() || !contact.email.trim()) {
       setOrder({ phase: 'error', message: 'Lengkapi nama, WhatsApp, dan email sebelum mengirim pesanan.' });
+      toast.error('Data kontak belum lengkap', 'Nama, WhatsApp, dan email wajib diisi.');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim())) {
       setOrder({ phase: 'error', message: 'Format email belum benar.' });
+      toast.error('Format email belum benar', 'Contoh: nama@email.com');
       return;
     }
     setOrder({ phase: 'loading' });
     try {
       const selected = PACKAGES.find((p) => p.id === pkg) ?? PACKAGES[0];
-      const res = await fetch('/api/orders', {
+      const res = await fetch(`${API_BASE}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -181,11 +335,28 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
       const result = await readJson<OrderCreatedResponse & { order: Order }>(res);
       if (!result.ok) {
         setOrder({ phase: 'error', message: result.error });
+        toast.error('Pesanan gagal dikirim', result.error);
         return;
       }
+      // Simpan nomor order terakhir agar /orders bisa menawarkan "Lanjutkan
+      // pesanan terakhir" (lihat components/shop/LastOrderHint).
+      try {
+        localStorage.setItem(
+          'craftai-last-order',
+          JSON.stringify({
+            number: result.data.orderNumber,
+            id: result.data.order.id,
+            at: Date.now(),
+          }),
+        );
+      } catch {
+        // Penyimpanan diblokir: lanjutkan redirect tanpa saran.
+      }
+      toast.success('Pesanan terkirim', `Nomor ${result.data.orderNumber} menuju developer.`);
       router.push(`/orders/${result.data.order.id}`);
     } catch {
       setOrder({ phase: 'error', message: 'Jaringan terputus saat mengirim pesanan. Coba lagi.' });
+      toast.error('Tidak bisa terhubung', 'Periksa koneksi Anda lalu coba lagi.');
     }
   }
 
@@ -193,101 +364,174 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
   if (templateError) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 bg-slate-950 flex-1">
-        <div role="alert" className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">
-          <p className="font-semibold mb-3">Customizer tidak bisa dibuka: {templateError}</p>
-          <Link href="/#katalog" className="inline-block px-4 py-2 rounded-lg bg-slate-900 border border-rose-400/40 font-semibold text-rose-100 hover:bg-slate-800 transition">
-            Kembali ke katalog
-          </Link>
+      <main id="konten" className="flex-1 bg-paper">
+        <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
+          <div role="alert" className="border border-danger bg-surface p-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">Gagal membuka</p>
+            <p className="mt-2 text-lg font-semibold leading-snug">
+              Customizer tidak bisa dibuka: {templateError}
+            </p>
+            <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
+              Penyebab paling umum: id template pada URL tidak ada lagi di katalog, atau permintaan
+              ke server gagal diproses.
+            </p>
+            <Link
+              href="/#katalog"
+              className="mt-6 inline-flex min-h-11 items-center border border-ink bg-accent px-4 text-[13px] font-semibold text-accent-ink"
+            >
+              Kembali ke katalog
+            </Link>
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="bg-slate-950 text-slate-100 flex-1">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Judul & breadcrumb */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-5 border-b border-slate-800 mb-6">
-          <div>
-            <Link href="/#katalog" className="text-xs font-semibold text-slate-400 hover:text-white inline-flex items-center gap-1 mb-2">
-              <span aria-hidden="true">‹</span> Kembali ke katalog
+    <main id="konten" className="flex-1 bg-paper">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+        {/* Kepala lembar kerja */}
+        <div className="flex flex-col gap-6 border-b border-ink pb-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <Link
+              href="/#katalog"
+              className="inline-flex min-h-11 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft hover:text-ink"
+            >
+              <span aria-hidden="true">&larr;</span> Kembali ke katalog
             </Link>
-            <h1 className="text-xl sm:text-2xl font-bold text-white">
-              AI Customizer: <span className="text-indigo-400">{template?.name ?? 'Memuat template…'}</span>
+            <h1 className="mt-2 text-[30px] font-semibold leading-[1.02] tracking-tight sm:text-[42px]">
+              {template ? template.name : 'Memuat template'}
+              {template ? <span className="text-ink-soft">, lalu AI menyusun draftnya.</span> : null}
             </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              {template ? `Kategori ${categoryLabel(template.category)} · Template dasar ${formatRupiah(template.base_price)}` : 'Sedang memuat detail template'}
+            <p className="mt-3 font-mono text-[11px] leading-relaxed text-ink-soft">
+              {template
+                ? `${categoryLabel(template.category)} / id ${template.id} / template ${formatRupiah(template.base_price)}`
+                : 'Mengambil detail template dari server'}
             </p>
           </div>
-          <div className="text-right">
-            <span className="text-xs text-slate-400">Paket terpilih</span>
-            <p className="text-xl font-bold text-emerald-400 font-mono">{formatRupiah(selectedPkg.price)}</p>
-          </div>
+
+          <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-2 border border-rule bg-surface p-4 lg:min-w-[260px]">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
+              Paket terpilih
+            </dt>
+            <dd className="font-mono text-[10px] text-ink">{selectedPkg.name}</dd>
+            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
+              Biaya eksekusi
+            </dt>
+            <dd className="font-mono text-[15px] text-ink">{formatRupiah(selectedPkg.price)}</dd>
+          </dl>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Form brief */}
-          <div className="lg:col-span-5 space-y-6">
-            <form onSubmit={generate} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-                <Wrench className="w-5 h-5 text-indigo-400" aria-hidden="true" />
-                <h2 className="font-bold text-white">Instruksi Modifikasi Bisnis Anda</h2>
+        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-10">
+          <div className="flex flex-col gap-8">
+            {/* Formulir brief */}
+            <form onSubmit={generate} className="border border-rule bg-surface">
+              <div className="flex items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
+                <h2 className="text-[15px] font-semibold">Brief modifikasi</h2>
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
+                  Langkah 02
+                </span>
               </div>
 
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4 p-5">
                 <div>
                   <label htmlFor="brief-brand" className={labelClass}>
-                    Nama Brand / Bisnis
+                    Nama brand / bisnis
                   </label>
                   <input
                     id="brief-brand"
                     name="brandName"
                     type="text"
                     required
+                    aria-invalid={touched.brandName && Boolean(errors.brandName)}
+                    aria-describedby={touched.brandName && errors.brandName ? 'err-brand' : undefined}
                     value={brief.brandName}
                     onChange={(e) => update('brandName', e.target.value)}
-                    className={inputClass}
+                    onBlur={() => setTouched((p) => ({ ...p, brandName: true }))}
+                    className={fieldClass(touched.brandName && Boolean(errors.brandName))}
                     placeholder="Contoh: Kopi Senja Utama"
                   />
+                  {touched.brandName && errors.brandName && (
+                    <p id="err-brand" role="alert" className="mt-1.5 font-mono text-[11px] text-danger">
+                      {errors.brandName}
+                    </p>
+                  )}
                 </div>
 
                 <div>
                   <label htmlFor="brief-tagline" className={labelClass}>
-                    Slogan / Tagline Singkat
+                    Slogan / tagline singkat
                   </label>
                   <input
                     id="brief-tagline"
                     name="tagline"
                     type="text"
                     required
+                    aria-invalid={touched.tagline && Boolean(errors.tagline)}
+                    aria-describedby={touched.tagline && errors.tagline ? 'err-tagline' : undefined}
                     value={brief.tagline}
                     onChange={(e) => update('tagline', e.target.value)}
-                    className={inputClass}
+                    onBlur={() => setTouched((p) => ({ ...p, tagline: true }))}
+                    className={fieldClass(touched.tagline && Boolean(errors.tagline))}
                     placeholder="Contoh: Rasa Otentik Kopi Nusantara"
                   />
+                  {touched.tagline && errors.tagline && (
+                    <p id="err-tagline" role="alert" className="mt-1.5 font-mono text-[11px] text-danger">
+                      {errors.tagline}
+                    </p>
+                  )}
                 </div>
 
                 <div>
-                  <label htmlFor="brief-desc" className={labelClass}>
-                    Deskripsi &amp; Nilai Tambah
-                  </label>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <label htmlFor="brief-desc" className={labelClass}>
+                      Deskripsi &amp; nilai tambah
+                    </label>
+                    <span
+                      id="desc-counter"
+                      className={[
+                        'mb-1.5 shrink-0 font-mono text-[11px]',
+                        brief.description.trim().length > DESC_MAX
+                          ? 'text-danger'
+                          : descLength < DESC_MIN
+                            ? 'text-ink-soft'
+                            : 'text-ok',
+                      ].join(' ')}
+                      aria-live="polite"
+                    >
+                      {descLength}/{DESC_MAX}
+                    </span>
+                  </div>
                   <textarea
                     id="brief-desc"
                     name="description"
                     rows={4}
                     required
+                    aria-invalid={touched.description && Boolean(errors.description)}
+                    aria-describedby={touched.description && errors.description ? 'err-desc' : 'hint-desc'}
                     value={brief.description}
                     onChange={(e) => update('description', e.target.value)}
-                    className={inputClass}
+                    onBlur={() => setTouched((p) => ({ ...p, description: true }))}
+                    className={`${fieldClass(touched.description && Boolean(errors.description))} min-h-[104px] resize-y`}
                     placeholder="Ceritakan produk, jam operasional, atau keunggulan bisnis Anda."
                   />
+                  <div className="mt-1.5 flex items-start justify-between gap-3">
+                    {touched.description && errors.description ? (
+                      <p id="err-desc" role="alert" className="font-mono text-[11px] text-danger">
+                        {errors.description}
+                      </p>
+                    ) : (
+                      <p id="hint-desc" className="font-mono text-[11px] text-ink-soft">
+                        Minimal {DESC_MIN} karakter.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label htmlFor="brief-color" className={labelClass}>
-                      Warna Aksen
+                      Warna aksen
                     </label>
                     <select
                       id="brief-color"
@@ -305,30 +549,40 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                   </div>
                   <div>
                     <label htmlFor="brief-cta" className={labelClass}>
-                      Tombol Aksi Utama
+                      Teks tombol utama
                     </label>
                     <input
                       id="brief-cta"
                       name="ctaText"
                       type="text"
                       required
+                      aria-invalid={touched.ctaText && Boolean(errors.ctaText)}
+                      aria-describedby={touched.ctaText && errors.ctaText ? 'err-cta' : undefined}
                       value={brief.ctaText}
                       onChange={(e) => update('ctaText', e.target.value)}
-                      className={inputClass}
+                      onBlur={() => setTouched((p) => ({ ...p, ctaText: true }))}
+                      className={fieldClass(touched.ctaText && Boolean(errors.ctaText))}
                       placeholder="Contoh: Pesan Sekarang"
                     />
+                    {touched.ctaText && errors.ctaText && (
+                      <p id="err-cta" role="alert" className="mt-1.5 font-mono text-[11px] text-danger">
+                        {errors.ctaText}
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div>
                   <label htmlFor="brief-tone" className={labelClass}>
-                    Nada Penulisan
+                    Nada penulisan
                   </label>
                   <select
                     id="brief-tone"
                     name="toneOfVoice"
                     value={brief.toneOfVoice}
                     onChange={(e) => update('toneOfVoice', e.target.value)}
+                    onBlur={() => setTouched((p) => ({ ...p, toneOfVoice: true }))}
+                    aria-invalid={touched.toneOfVoice && Boolean(errors.toneOfVoice)}
                     className={inputClass}
                   >
                     {TONE_OPTIONS.map((t) => (
@@ -337,105 +591,130 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                       </option>
                     ))}
                   </select>
+                  {touched.toneOfVoice && errors.toneOfVoice && (
+                    <p role="alert" className="mt-1.5 font-mono text-[11px] text-danger">
+                      {errors.toneOfVoice}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={gen.phase === 'loading'}
-                className="mt-5 w-full py-3 rounded-xl font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
-              >
-                {gen.phase === 'loading' ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden="true" />
-                    <span>AI sedang menyusun konten…</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" aria-hidden="true" />
+              <div className="border-t border-rule p-5">
+                <button
+                  type="submit"
+                  disabled={gen.phase === 'loading' || !briefValid}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 border border-ink bg-accent px-4 text-sm font-semibold text-accent-ink transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--ink)] disabled:translate-y-0 disabled:bg-rule disabled:text-ink-soft disabled:shadow-none"
+                >
+                  {gen.phase === 'loading' ? (
+                    <>
+                      <span
+                        className="size-3.5 animate-spin border-2 border-current border-t-transparent motion-reduce:animate-none"
+                        aria-hidden="true"
+                      />
+                      <span>AI sedang menyusun…</span>
+                    </>
+                  ) : (
                     <span>Generate Modifikasi AI</span>
-                  </>
+                  )}
+                </button>
+                {!briefValid && (
+                  <p className="mt-2 font-mono text-[11px] leading-relaxed text-ink-soft">
+                    Lengkapi kolom yang wajib diisi untuk mengaktifkan tombol.
+                  </p>
                 )}
-              </button>
-
-              <p className="mt-3 text-[11px] text-slate-300 leading-relaxed">
-                Konten dibuat server kami dari brief ini. Bila API key Gemini tidak tersedia, sistem memakai generator
-                lokal deterministik — badge di kanan akan menyatakan asalnya apa adanya.
-              </p>
+                <p className="mt-3 font-mono text-[10px] leading-relaxed text-ink-soft">
+                  Konten disusun di server dari brief ini. Bila API key Gemini tidak tersedia,
+                  generator lokal deterministik dipakai, dan badge engine menyatakan itu apa adanya.
+                </p>
+              </div>
             </form>
 
             {/* Checkout */}
-            <form onSubmit={checkout} className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <h2 className="font-bold text-white mb-1">Checkout &amp; Kirim ke Developer</h2>
-              <p className="text-xs text-slate-400 mb-4">
-                {gen.phase === 'done'
-                  ? 'Draft siap dikirim. Pilih paket lalu isi kontak Anda.'
-                  : 'Generate draft terlebih dahulu untuk mengaktifkan tombol kirim.'}
-              </p>
+            <form onSubmit={checkout} className="border border-rule bg-surface">
+              <div className="flex items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
+                <h2 className="text-[15px] font-semibold">Checkout &amp; kirim ke developer</h2>
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
+                  Langkah 03
+                </span>
+              </div>
 
-              <fieldset className="space-y-3">
-                <legend className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Paket Eksekusi</legend>
-                {PACKAGES.map((p) => {
-                  const active = pkg === p.id;
-                  return (
-                    <label
-                      key={p.id}
-                      className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition ${
-                        active ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-950 hover:border-slate-700'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="package"
-                        value={p.id}
-                        checked={active}
-                        onChange={() => setPkg(p.id)}
-                        className="mt-1 accent-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
-                      />
-                      <span className="flex-1 min-w-0">
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-sm text-white">Paket {p.name}</span>
-                          <span className="font-mono text-sm font-bold text-emerald-400">{formatRupiah(p.price)}</span>
+              <div className="flex flex-col gap-5 p-5">
+                <p className="text-[13px] leading-relaxed text-ink-soft">
+                  {gen.phase === 'done'
+                    ? 'Draft siap dikirim. Pilih paket, lalu isi kontak yang bisa dihubungi developer.'
+                    : 'Tombol kirim aktif setelah draft berhasil dibuat.'}
+                </p>
+
+                <fieldset className="flex flex-col gap-2">
+                  <legend className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
+                    Paket eksekusi
+                  </legend>
+                  {PACKAGES.map((p) => {
+                    const active = pkg === p.id;
+                    return (
+                      <label
+                        key={p.id}
+                        className={[
+                          'flex cursor-pointer items-start gap-3 border p-3.5 transition-colors',
+                          active ? 'border-ink bg-paper' : 'border-rule bg-surface hover:border-ink',
+                        ].join(' ')}
+                      >
+                        <input
+                          type="radio"
+                          name="package"
+                          value={p.id}
+                          checked={active}
+                          onChange={() => setPkg(p.id)}
+                          className="mt-1 size-4 accent-[var(--accent)]"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                            <span className="text-[13px] font-semibold">Paket {p.name}</span>
+                            <span className="font-mono text-[13px]">{formatRupiah(p.price)}</span>
+                          </span>
+                          <span className="mt-1 block text-[12px] leading-relaxed text-ink-soft">
+                            {p.summary}
+                          </span>
                         </span>
-                        <span className="block text-xs text-slate-400 mt-0.5 leading-relaxed">{p.summary}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </fieldset>
+                      </label>
+                    );
+                  })}
+                </fieldset>
 
-              <div className="mt-5 space-y-4">
-                <div>
-                  <label htmlFor="contact-name" className={labelClass}>
-                    Nama Lengkap
-                  </label>
-                  <input
-                    id="contact-name"
-                    name="contactName"
-                    type="text"
-                    required
-                    value={contact.name}
-                    onChange={(e) => setContact({ ...contact, name: e.target.value })}
-                    className={inputClass}
-                    placeholder="Nama pemesan"
-                  />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="contact-name" className={labelClass}>
+                      Nama lengkap
+                    </label>
+                    <input
+                      id="contact-name"
+                      name="contactName"
+                      type="text"
+                      required
+                      value={contact.name}
+                      onChange={(e) => setContact({ ...contact, name: e.target.value })}
+                      className={inputClass}
+                      placeholder="Nama pemesan"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="contact-wa" className={labelClass}>
+                      Nomor WhatsApp
+                    </label>
+                    <input
+                      id="contact-wa"
+                      name="contactWhatsapp"
+                      type="tel"
+                      required
+                      inputMode="numeric"
+                      value={contact.whatsapp}
+                      onChange={(e) => setContact({ ...contact, whatsapp: e.target.value })}
+                      className={inputClass}
+                      placeholder="0812xxxxxxx"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label htmlFor="contact-wa" className={labelClass}>
-                    Nomor WhatsApp
-                  </label>
-                  <input
-                    id="contact-wa"
-                    name="contactWhatsapp"
-                    type="tel"
-                    required
-                    inputMode="numeric"
-                    value={contact.whatsapp}
-                    onChange={(e) => setContact({ ...contact, whatsapp: e.target.value })}
-                    className={inputClass}
-                    placeholder="0812xxxxxxx"
-                  />
-                </div>
+
                 <div>
                   <label htmlFor="contact-email" className={labelClass}>
                     Email
@@ -451,86 +730,123 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                     placeholder="nama@email.com"
                   />
                 </div>
-              </div>
 
-              <div className="mt-4 rounded-xl bg-indigo-950/40 border border-indigo-500/20 p-4 text-xs text-slate-300">
-                <span className="flex items-center gap-1.5 font-bold text-indigo-300 mb-1">
-                  <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
-                  Garansi eksekusi human developer:
-                </span>
-                Draft yang Anda lihat akan dicek, dirapikan source code-nya, dioptimalkan, lalu di-deploy oleh tim kami.
-                Pembayaran pada demo ini bersifat mock.
-              </div>
+                <div className="border border-rule bg-paper p-4">
+                  <p className="text-[12px] font-semibold">Yang terjadi setelah tombol kirim</p>
+                  <ul className="mt-2 flex flex-col gap-1.5 text-[12px] leading-relaxed text-ink-soft">
+                    <li>Order dibuat dengan nomor UK-ORD-XXXX dan status Pembayaran.</li>
+                    <li>Developer menulis kode, men-deploy, lalu mengisi URL live dan unduhan.</li>
+                    <li>Pembayaran pada demo ini adalah simulasi, bukan transaksi nyata.</li>
+                  </ul>
+                </div>
 
-              {order.phase === 'error' && (
-                <p role="alert" className="mt-3 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">
-                  {order.message}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={gen.phase !== 'done' || order.phase === 'loading'}
-                className="mt-4 w-full py-3.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-              >
-                {order.phase === 'loading' ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden="true" />
-                    <span>Mengirim pesanan…</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-5 h-5" aria-hidden="true" />
-                    <span>Kirim ke Tim Developer untuk Dikerjakan</span>
-                  </>
+                {order.phase === 'error' && (
+                  <p
+                    role="alert"
+                    className="border border-danger bg-paper px-3 py-2 text-[12px] leading-relaxed text-danger"
+                  >
+                    {order.message}
+                  </p>
                 )}
-              </button>
+
+                <button
+                  type="submit"
+                  disabled={gen.phase !== 'done' || order.phase === 'loading'}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 border border-ink bg-ink px-4 text-sm font-semibold text-paper transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--accent)] disabled:translate-y-0 disabled:border-rule disabled:bg-rule disabled:text-ink-soft disabled:shadow-none"
+                >
+                  {order.phase === 'loading' ? (
+                    <>
+                      <span
+                        className="size-3.5 animate-spin border-2 border-current border-t-transparent"
+                        aria-hidden="true"
+                      />
+                      <span>Mengirim pesanan</span>
+                    </>
+                  ) : (
+                    <span>Kirim ke Tim Developer untuk Dikerjakan</span>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
 
-          {/* Live preview */}
-          <div className="lg:col-span-7">
-            <div className="flex items-center justify-between bg-slate-900 px-4 py-2.5 rounded-t-2xl border-t border-x border-slate-800 gap-3 flex-wrap">
-              <span className="text-xs text-slate-400 font-mono">Live AI Preview Canvas</span>
+          {/* Lembar preview */}
+          <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+            <div className="flex flex-wrap items-center justify-between gap-3 border border-rule bg-surface px-4 py-2.5">
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
+                Lembar proof / hasil draft
+              </span>
               <EngineBadge engine={gen.phase === 'done' ? gen.engine : null} />
             </div>
 
             {gen.phase === 'idle' && (
-              <div className="bg-slate-950 border border-slate-800 rounded-b-2xl min-h-[520px] flex flex-col items-center justify-center text-center p-8">
-                <span className="text-4xl mb-4" aria-hidden="true">
-                  template ? template.emoji : <Sparkles className="w-8 h-8 text-indigo-300" aria-hidden="true" />
-                </span>
-                <p className="text-slate-300 font-semibold">Preview akan muncul di sini</p>
-                <p className="text-sm text-slate-400 mt-2 max-w-sm leading-relaxed">
-                  Isi brief di sebelah kiri, lalu tekan <strong className="text-slate-400">Generate Modifikasi AI</strong>.
-                  Hasil draft dirender apa adanya dari server.
-                </p>
+              <div className="flex min-h-[420px] flex-col justify-between gap-6 border border-t-0 border-rule bg-paper p-6">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
+                    Belum ada draft
+                  </p>
+                  <p className="mt-3 max-w-sm text-[17px] font-semibold leading-snug">
+                    Lembar ini akan berisi halaman hasil olahan AI dari brief Anda.
+                  </p>
+                  <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">
+                    Isi brief di kolom kiri, lalu tekan <strong className="text-ink">Generate Modifikasi AI</strong>.
+                    Respons server dirender apa adanya, termasuk bila isinya berupa generator lokal.
+                  </p>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-rule pt-4 font-mono text-[10px] text-ink-soft">
+                  <dt>brand.name</dt>
+                  <dd>isi brief</dd>
+                  <dt>theme.primaryColor</dt>
+                  <dd>pilihan warna</dd>
+                  <dt>features</dt>
+                  <dd>3 item</dd>
+                  <dt>faq</dt>
+                  <dd>2 item</dd>
+                </dl>
               </div>
             )}
 
             {gen.phase === 'loading' && (
-              <div className="bg-slate-950 border border-slate-800 rounded-b-2xl min-h-[520px] p-6 space-y-4 animate-pulse" aria-busy="true">
-                <div className="h-8 w-1/2 bg-slate-800 rounded" />
-                <div className="h-6 w-3/4 bg-slate-800 rounded mx-auto" />
-                <div className="h-4 w-2/3 bg-slate-800 rounded mx-auto" />
-                <div className="grid grid-cols-3 gap-3 pt-6 border-t border-slate-800">
-                  <div className="h-20 bg-slate-800 rounded-xl" />
-                  <div className="h-20 bg-slate-800 rounded-xl" />
-                  <div className="h-20 bg-slate-800 rounded-xl" />
+              <div
+                className="min-h-[420px] animate-pulse border border-t-0 border-rule bg-paper p-6"
+                aria-busy="true"
+              >
+                <span className="sr-only">Server sedang menyusun draft dari brief Anda</span>
+                <div className="h-3 w-40 bg-rule" aria-hidden="true" />
+                <div className="mt-4 h-6 w-3/4 bg-rule" aria-hidden="true" />
+                <div className="mt-3 h-3 w-full bg-rule" aria-hidden="true" />
+                <div className="mt-2 h-3 w-2/3 bg-rule" aria-hidden="true" />
+                <div className="mt-6 grid grid-cols-3 gap-3" aria-hidden="true">
+                  <div className="h-20 border border-rule bg-surface" />
+                  <div className="h-20 border border-rule bg-surface" />
+                  <div className="h-20 border border-rule bg-surface" />
                 </div>
-                <p className="text-xs text-indigo-300 text-center">Server sedang menyusun draft dari brief Anda…</p>
+                <p className="mt-6 font-mono text-[10px] text-ink-soft">
+                  Menyusun hero, tiga fitur, dan dua tanya jawab.
+                </p>
               </div>
             )}
 
             {gen.phase === 'error' && (
-              <div role="alert" className="bg-slate-950 border border-rose-500/40 rounded-b-2xl min-h-[520px] flex flex-col items-center justify-center text-center p-8">
-                <TriangleAlert className="w-8 h-8 text-rose-300 mb-3" aria-hidden="true" />
-                <p className="text-rose-200 font-semibold">Generate gagal</p>
-                <p className="text-sm text-rose-300/80 mt-2 max-w-md leading-relaxed">{gen.message}</p>
+              <div
+                role="alert"
+                className="flex min-h-[420px] flex-col justify-between gap-6 border border-t-0 border-danger bg-paper p-6"
+              >
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-danger">
+                    Draft gagal dibuat
+                  </p>
+                  <p className="mt-3 max-w-sm text-[17px] font-semibold leading-snug">
+                    Server menolak brief ini.
+                  </p>
+                  <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">
+                    {gen.message}
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={generate}
-                  className="mt-5 px-5 py-2.5 rounded-xl bg-slate-900 border border-rose-400/40 text-sm font-semibold text-rose-100 hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+                  className="inline-flex min-h-11 w-fit items-center border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
                 >
                   Coba lagi
                 </button>
@@ -538,19 +854,17 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             )}
 
             {gen.phase === 'done' && (
-              <div data-testid="draft-preview">
+              <div data-testid="draft-preview" className="border border-t-0 border-rule">
                 <DraftPreview draft={gen.content} />
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                  <span>
-                    Draft ID: <span className="font-mono text-slate-400">{gen.draftId}</span>
-                  </span>
-                  <span>Bagian checkout di kiri mengirim draft ini ke developer.</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-x border-b border-rule bg-surface px-4 py-2.5 font-mono text-[10px] text-ink-soft">
+                  <span>draftId {gen.draftId}</span>
+                  <span>Checkout di kolom kiri mengirim draft ini ke developer.</span>
                 </div>
               </div>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -1,51 +1,78 @@
 import Link from 'next/link';
-import { Sparkles, WandSparkles } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
+
+// Navigasi hanya berisi tujuan yang benar-benar ada: /#cara-kerja, /#katalog,
+// /#paket, dan /orders. Tanpa backdrop-blur: header kertas pekat dengan garis
+// bawah 1px, konsisten dengan bahasa cetak (DESIGN.md).
+const NAV = [
+  { href: '/#cara-kerja', label: 'Cara kerja' },
+  { href: '/#katalog', label: 'Template' },
+  { href: '/#paket', label: 'Paket' },
+  { href: '/orders', label: 'Lacak pesanan' },
+];
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 backdrop-blur-md bg-slate-900/80 border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center space-x-3 group">
-          <span className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30 text-white">
-            <Sparkles className="w-5 h-5" aria-hidden="true" />
+    <header className="sticky top-0 z-50 border-b border-rule bg-paper">
+      <div className="mx-auto flex h-16 max-w-6xl items-stretch justify-between gap-4 px-4 sm:px-6">
+        <Link href="/" className="flex min-w-0 items-center gap-3">
+          <span
+            className="grid size-9 shrink-0 place-items-center border border-ink bg-ink font-mono text-[13px] font-bold text-paper"
+            aria-hidden="true"
+          >
+            CS
           </span>
-          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
-            CraftAI Studio
+          <span className="flex min-w-0 flex-col leading-none">
+            <span className="truncate text-[15px] font-semibold tracking-tight">CraftAI Studio</span>
+            <span className="mt-1 hidden font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft sm:block">
+              Riset &amp; cetak web UMKM
+            </span>
           </span>
         </Link>
 
-        <nav aria-label="Navigasi utama" className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
-          <Link href="/#cara-kerja" className="hover:text-white transition">
-            Cara Kerja
-          </Link>
-          <Link href="/#katalog" className="hover:text-white transition">
-            Pilihan Template
-          </Link>
-          <Link href="/orders" className="hover:text-white transition">
-            Lacak Pesanan
-          </Link>
-        </nav>
+        <div className="flex items-center gap-2">
+          <nav aria-label="Navigasi utama" className="hidden h-full items-stretch md:flex">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center border-l border-rule px-4 text-[13px] text-ink-soft transition-colors hover:bg-surface hover:text-ink"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
 
-        <Link
-          href="/#katalog"
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 transition flex items-center gap-2 text-white shadow-lg shadow-indigo-600/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
-        >
-          <WandSparkles className="w-4 h-4" aria-hidden="true" />
-          <span>Mulai Kustomisasi</span>
-        </Link>
+          <ThemeToggle className="hidden sm:grid" />
+
+          <Link
+            href="/#katalog"
+            className="hidden h-11 items-center border border-ink bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-transform hover:-translate-y-px hover:shadow-[2px_2px_0_0_var(--ink)] sm:inline-flex"
+          >
+            Mulai dari katalog
+          </Link>
+        </div>
       </div>
-      {/* nav mobile: teks kecil agar 375px tetap nyaman */}
-      <nav aria-label="Navigasi mobile" className="md:hidden border-t border-slate-800/70 px-4 py-2 flex gap-5 text-xs font-medium text-slate-400">
-        <Link href="/#cara-kerja" className="hover:text-white transition">
-          Cara Kerja
-        </Link>
-        <Link href="/#katalog" className="hover:text-white transition">
-          Template
-        </Link>
-        <Link href="/orders" className="hover:text-white transition">
-          Lacak Pesanan
-        </Link>
-      </nav>
+
+      {/* Baris kedua khusus ponsel: dua kolom agar tidak ada overflow di 375px. */}
+      <div className="grid grid-cols-2 border-t border-rule md:hidden">
+        {NAV.map((item, index) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={[
+              'flex min-h-11 items-center justify-between gap-2 px-4 text-[12px] text-ink-soft transition-colors active:bg-surface',
+              index % 2 === 1 ? 'border-l border-rule' : '',
+              index > 1 ? 'border-t border-rule' : '',
+            ].join(' ')}
+          >
+            <span>{item.label}</span>
+            <span className="font-mono text-[10px] text-ink-soft" aria-hidden="true">
+              0{index + 1}
+            </span>
+          </Link>
+        ))}
+      </div>
     </header>
   );
 }

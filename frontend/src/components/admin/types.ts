@@ -1,6 +1,9 @@
 // Kontrak data lokal untuk halaman back-office. Bentuknya mengikuti docs/SPEC.md
-// dan src/lib/types.ts, tetapi sengaja dideklarasi ulang agar halaman admin
+// dan src/lib/types.ts, tetapi sengaja dideklarasikan ulang agar halaman admin
 // tidak langsung bergantung pada modul milik Agent-BACKEND saat build paralel.
+//
+// Nilai tampilan (COLUMN_META, STATUS_TONE) memakai utility token semantik dari
+// globals.css supaya tema gelap ikut beralih tanpa varian tema di komponen.
 
 export type OrderStatus = 'draft' | 'paid' | 'in_progress' | 'review' | 'completed';
 export type PaymentStatus = 'unpaid' | 'paid';
@@ -68,36 +71,29 @@ export interface KanbanColumns {
 
 export type ColumnKey = keyof KanbanColumns;
 
+// Ringkasan dari GET /api/admin/stats. Dipakai baris statistik dashboard supaya
+// angka yang tampil berasal dari data, bukan konstanta di komponen.
+export interface AdminStats {
+  counts: Record<OrderStatus, number> & { total: number };
+  revenue: number;
+  delivered: number;
+  averageCompletionHours: number | null;
+  totalLogs: number;
+  recentOrders: AdminOrder[];
+}
+
 export const COLUMN_ORDER: ColumnKey[] = ['backlog', 'in_progress', 'review', 'completed'];
 
+// Label kolom dipakai apa adanya oleh papan — jangan diubah tanpa menyesuaikan
+// teks yang diperiksa tes E2E.
 export const COLUMN_META: Record<
   ColumnKey,
   { label: string; hint: string; dot: string; ring: string }
 > = {
-  backlog: {
-    label: 'Backlog',
-    hint: 'draft + paid',
-    dot: 'bg-sky-400',
-    ring: 'border-sky-500/40',
-  },
-  in_progress: {
-    label: 'In Progress',
-    hint: 'sedang dikerjakan',
-    dot: 'bg-amber-400',
-    ring: 'border-amber-500/40',
-  },
-  review: {
-    label: 'Need Review',
-    hint: 'menunggu QA',
-    dot: 'bg-rose-400',
-    ring: 'border-rose-500/40',
-  },
-  completed: {
-    label: 'Completed',
-    hint: 'siap kirim',
-    dot: 'bg-emerald-400',
-    ring: 'border-emerald-500/40',
-  },
+  backlog: { label: 'Backlog', hint: 'draft + paid', dot: 'bg-ink-soft', ring: 'border-rule' },
+  in_progress: { label: 'In Progress', hint: 'sedang dikerjakan', dot: 'bg-warn', ring: 'border-warn' },
+  review: { label: 'Need Review', hint: 'menunggu QA', dot: 'bg-accent', ring: 'border-accent' },
+  completed: { label: 'Completed', hint: 'siap kirim', dot: 'bg-ok', ring: 'border-ok' },
 };
 
 export const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -108,22 +104,61 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   completed: 'Completed',
 };
 
+// Cap status: kotak ber-border 1.5px + huruf mono, bukan pill glassy.
 export const STATUS_TONE: Record<OrderStatus, string> = {
-  draft: 'bg-slate-500/15 text-slate-300 ring-slate-500/40',
-  paid: 'bg-sky-500/15 text-sky-300 ring-sky-500/40',
-  in_progress: 'bg-amber-500/15 text-amber-300 ring-amber-500/40',
-  review: 'bg-rose-500/15 text-rose-300 ring-rose-500/40',
-  completed: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/40',
+  draft: 'border-rule text-ink-soft',
+  paid: 'border-ink text-ink',
+  in_progress: 'border-warn text-warn',
+  review: 'border-accent text-accent',
+  completed: 'border-ok text-ok',
 };
 
 export const ALL_STATUSES: OrderStatus[] = ['draft', 'paid', 'in_progress', 'review', 'completed'];
 
-export function formatRupiah(value: number): string {
+/** Filter status sisi klien: 'all' atau salah satu kolom papan. */
+export type StatusFilter = 'all' | ColumnKey;
+
+export const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'Semua status' },
+  { value: 'backlog', label: 'Backlog (draft + paid)' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'review', label: 'Need Review' },
+  { value: 'completed', label: 'Completed' },
+];
+
+/** Kolom papan tempat sebuah status order berada (draft/paid -> backlog). */
+export function columnOfStatus(status: OrderStatus): ColumnKey {
+  if (status === 'draft' || status === 'paid') return 'backlog';
+  return status;
+}
+
+/** Angka aman: respons API yang cacat tidak boleh menjelma "NaN" di layar. */
+export function safeNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+export function formatRupiah(value: number | null | undefined): string {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(safeNumber(value));
+}
+
+/** Versi ringkas untuk kartu statistik: Rp 12,4 jt, bukan 12.400.000. */
+export function formatRupiahShort(value: number | null | undefined): string {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(safeNumber(value));
+}
+
+/** Rata-rata jam selesai; '—' saat belum ada order completed. */
+export function formatHours(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  return `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(value)} jam`;
 }
 
 export function formatDate(value: string | null | undefined): string {

@@ -8,7 +8,7 @@ import os
 import sys
 from playwright.sync_api import sync_playwright
 
-BASE = "http://localhost:3000"
+BASE = os.environ.get("BASE_URL", "http://localhost:3000")
 WS = os.environ.get("SHOT_DIR", os.path.dirname(os.path.abspath(__file__)))
 results = []
 
@@ -27,7 +27,7 @@ with sync_playwright() as p:
     # --- 1. Home ---
     page.goto(f"{BASE}/", wait_until="networkidle")
     check("home: judul CraftAI Studio", "CraftAI" in page.title())
-    grid = page.locator("[data-testid='template-grid'] [class*='rounded-2xl']")
+    grid = page.locator("[data-testid='template-grid'] article")
     check("home: katalog render 3 kartu", grid.count() >= 3)
     page.screenshot(path=f"{WS}/e2e-01-home.png", full_page=False)
 
@@ -45,7 +45,9 @@ with sync_playwright() as p:
         page.wait_for_timeout(300)
 
     # --- 3. Customizer: generate draft ---
-    page.get_by_role("link", name="Kustomisasi dengan AI").first.click()
+    # Kartu katalog adalah satu link utuh (overlay absolute) supaya area klik
+    # besar; jadi klik link template di dalam kartu, bukan label visualnya.
+    page.locator("[data-testid='template-grid'] a[href^='/customizer/']").first.click()
     page.wait_for_url("**/customizer/**", timeout=30000)
     page.wait_for_load_state("networkidle")
     check("customizer: halaman terbuka", "/customizer/" in page.url)

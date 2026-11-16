@@ -1,22 +1,28 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { EmptyBlock } from '@/components/ui/EmptyBlock';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Reveal } from './Reveal';
 import { TemplateCard } from './TemplateCard';
 import { type Template, categoryLabel, readJson } from './types';
+import { API_BASE } from '@/lib/api';
 
 type LoadState =
   | { phase: 'loading' }
   | { phase: 'error'; message: string }
   | { phase: 'ready'; templates: Template[] };
 
+// Katalog = rak cetak: judul ledger, filter bergaris, grid kartu.
+// id="katalog" dan data-testid="template-grid" dipakai navigasi + tes E2E.
 export function TemplateCatalog() {
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const [active, setActive] = useState('semua');
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/templates')
-      .then((res) => readJson<{ templates: Template[] }>(res))
+    fetch(`${API_BASE}/api/templates`)
+          .then((res) => readJson<{ templates: Template[] }>(res))
       .then((result) => {
         if (!alive) return;
         if (result.ok) setState({ phase: 'ready', templates: result.data.templates ?? [] });
@@ -30,12 +36,8 @@ export function TemplateCatalog() {
     };
   }, []);
 
-  // Dibungkus useMemo agar referensinya stabil dan dependensi useMemo di
-  // bawah tidak ikut berubah tiap render.
-  const templates = useMemo(
-    () => (state.phase === 'ready' ? state.templates : []),
-    [state],
-  );
+  const templates = useMemo(() => (state.phase === 'ready' ? state.templates : []), [state]);
+
   const categories = useMemo(() => {
     const seen: string[] = [];
     templates.forEach((t) => {
@@ -49,90 +51,153 @@ export function TemplateCatalog() {
     return templates.filter((t) => t.category === active);
   }, [templates, active]);
 
-  const filters = [{ key: 'semua', label: 'Semua' }, ...categories.map((c) => ({ key: c, label: categoryLabel(c) }))];
+  const filters = [
+    { key: 'semua', label: 'Semua' },
+    ...categories.map((c) => ({ key: c, label: categoryLabel(c) })),
+  ];
 
   return (
-    <section id="katalog" className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Koleksi Template Pilihan</h2>
-          <p className="mt-2 text-slate-400">Pilih template awal yang paling relevan dengan kebutuhan bisnis Anda.</p>
-        </div>
+    <Reveal
+      as="section"
+      id="katalog"
+      className="scroll-mt-24 border-t border-ink bg-paper"
+    >
+      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+        <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-xl">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-soft">
+              Rak 02 / Katalog
+            </p>
+            <h2 className="mt-3 text-[32px] font-semibold leading-[1.05] tracking-tight sm:text-[44px]">
+              Tiga template siap cetak
+            </h2>
+            <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
+              Setiap template punya struktur halaman dan palet dasar. Yang berubah setelah brief
+              Anda masuk: nama brand, warna aksen, headline, daftar fitur, dan tanya jawab.
+            </p>
+          </div>
 
-        {/* Filter kategori — punya handler sungguhan (bug di prototype lama) */}
-        <div role="group" aria-label="Filter kategori template" className="flex flex-wrap gap-2">
-          {filters.map((f) => {
-            const isActive = active === f.key;
-            return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => setActive(f.key)}
-                aria-pressed={isActive}
-                data-category={f.key}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                {f.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {state.phase === 'loading' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" aria-live="polite">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden animate-pulse">
-              <div className="h-44 bg-slate-800" />
-              <div className="p-6 space-y-3">
-                <div className="h-5 w-2/3 bg-slate-800 rounded" />
-                <div className="h-4 w-full bg-slate-800 rounded" />
-                <div className="h-9 w-full bg-slate-800 rounded-xl" />
-              </div>
+          <div className="flex flex-col gap-2 lg:items-end">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+              Saring per kategori
+            </p>
+            <div role="group" aria-label="Filter kategori template" className="flex flex-wrap gap-2">
+              {filters.map((f) => {
+                const isActive = active === f.key;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setActive(f.key)}
+                    aria-pressed={isActive}
+                    data-category={f.key}
+                    className={[
+                      'min-h-11 border px-4 text-[13px] transition-colors',
+                      isActive
+                        ? 'border-ink bg-ink font-semibold text-paper'
+                        : 'border-rule bg-surface text-ink-soft hover:border-ink hover:text-ink',
+                    ].join(' ')}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
             </div>
-          ))}
+          </div>
         </div>
-      )}
 
-      {state.phase === 'error' && (
-        <div
-          role="alert"
-          className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200 flex flex-col sm:flex-row sm:items-center gap-4 justify-between"
-        >
-          <span>Gagal memuat katalog: {state.message}</span>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="self-start sm:self-auto px-4 py-2 rounded-lg bg-slate-900 border border-rose-400/40 font-semibold text-rose-100 hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
-          >
-            Muat ulang
-          </button>
+        <div className="mt-10 border-t border-rule pt-6">
+          {state.phase === 'loading' && (
+            <div
+              className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <p className="sr-only">Memuat katalog template</p>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse flex-col border border-rule bg-surface"
+                  aria-hidden="true"
+                >
+                  <div className="h-20 border-b border-rule bg-paper" />
+                  <div className="flex flex-col gap-3 p-5">
+                    <div className="h-3 w-24 bg-rule" />
+                    <div className="h-5 w-3/4 bg-rule" />
+                    <div className="h-3 w-full bg-rule" />
+                    <div className="h-3 w-2/3 bg-rule" />
+                    <div className="mt-4 h-11 w-full border border-rule bg-paper" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {state.phase === 'error' && (
+            <div
+              role="alert"
+              className="flex flex-col gap-4 border border-danger bg-surface p-6 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <p className="font-semibold text-danger">Katalog gagal dimuat</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{state.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="min-h-11 shrink-0 border border-ink bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-transform hover:-translate-y-px hover:shadow-[2px_2px_0_0_var(--ink)]"
+              >
+                Muat ulang
+              </button>
+            </div>
+          )}
+
+          {state.phase === 'ready' && templates.length === 0 && (
+            <EmptyState
+              icon="0"
+              title="Belum ada template aktif"
+              description="Tabel template masih kosong atau seluruh baris berstatus nonaktif. Muat ulang setelah data diisi lewat panel admin."
+            >
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-4 min-h-11 border border-ink bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-transform hover:-translate-y-px hover:shadow-[2px_2px_0_0_var(--ink)]"
+              >
+                Muat ulang
+              </button>
+            </EmptyState>
+          )}
+
+          {state.phase === 'ready' && templates.length > 0 && visible.length === 0 && (
+            <div aria-live="polite">
+              <EmptyBlock
+                title={`Kategori ${categoryLabel(active)} belum terisi`}
+                description={`Tampilkan semua kategori untuk melihat ${templates.length} template yang tersedia.`}
+                actionLabel="Tampilkan semua"
+                onAction={() => setActive('semua')}
+              />
+            </div>
+          )}
+
+          {state.phase === 'ready' && visible.length > 0 && (
+            <div
+              className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+              data-testid="template-grid"
+            >
+              {visible.map((t) => (
+                <TemplateCard key={t.id} template={t} />
+              ))}
+            </div>
+          )}
         </div>
-      )}
 
-      {state.phase === 'ready' && templates.length === 0 && (
-        <p className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-slate-400 text-sm">
-          Belum ada template aktif. Silakan coba lagi beberapa saat.
+        <p className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-[11px] text-ink-soft">
+          <span className="border border-rule px-1.5 py-0.5 uppercase tracking-wide">Catatan</span>
+          <span>
+            Harga di kartu adalah harga template. Biaya eksekusi ditentukan pada langkah paket.
+          </span>
         </p>
-      )}
-
-      {state.phase === 'ready' && templates.length > 0 && visible.length === 0 && (
-        <p className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-slate-400 text-sm" aria-live="polite">
-          Tidak ada template pada kategori “{categoryLabel(active)}”. Pilih “Semua” untuk melihat seluruh koleksi.
-        </p>
-      )}
-
-      {state.phase === 'ready' && visible.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" data-testid="template-grid">
-          {visible.map((t) => (
-            <TemplateCard key={t.id} template={t} />
-          ))}
-        </div>
-      )}
-    </section>
+      </div>
+    </Reveal>
   );
 }

@@ -1,30 +1,169 @@
 @import "tailwindcss";
 
-/* Tema gelap ala prototype index.html: slate-950 + aksen indigo. */
+/* Arah desain: design-system/craftai-studio/DESIGN.md (print workshop: kertas,
+   tinta, garis registrasi). Semua komponen memakai token semantik di bawah,
+   sehingga tema terang/gelap beralih tanpa satu pun `dark:` di komponen. */
 :root {
-  --background: #020617; /* slate-950 */
-  --foreground: #f1f5f9; /* slate-100 */
+  --paper: #f5f0e6;
+  --surface: #fffcf6;
+  --ink: #16130f;
+  --ink-soft: #5c544b;
+  --rule: #d8d0c2;
+  --accent: #c63c1c;
+  --accent-ink: #ffffff;
+  --ok: #1f6f4a;
+  --warn: #8a5a00;
+  --danger: #b3261e;
+  --shadow-press: 4px 4px 0 0 var(--ink);
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-html {
+[data-theme='dark'] {
+  --paper: #141210;
+  --surface: #1e1a16;
+  --ink: #f5f0e6;
+  --ink-soft: #a79c8e;
+  --rule: #352f28;
+  --accent: #ff6b3d;
+  --accent-ink: #141210;
+  --ok: #5fd3a0;
+  --warn: #e8b54b;
+  --danger: #ff8a7a;
+  --shadow-press: 4px 4px 0 0 var(--ink);
   color-scheme: dark;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 }
 
-/* Hormati prefers-reduced-motion: matikan animasi & transisi dekoratif
-   (WCAG 2.3.3; checklist ui-ux-pro-max). */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Judul dirapatkan: teks poster di atas kertas terlihat miring kalau tracking
+     default browser dipakai. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  /* Fokus keyboard: garis 2px + offset, terbaca di kertas maupun tinta. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  button,
+  a,
+  [role='button'],
+  select,
+  input[type='checkbox'],
+  input[type='radio'],
+  label[for],
+  summary {
+    cursor: pointer;
+  }
+
+  :disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  /* Kolom grid kerja yang terlihat: hanya dipakai di hero sebagai referensi
+     struktur, bukan pola latar seluruh halaman. */
+  .grid-paper {
+    background-image: linear-gradient(to right, var(--rule) 1px, transparent 1px);
+    background-size: calc(100% / 6) 100%;
+  }
+
+  /* Garis registrasi di sudut panel cetak. */
+  .reg-mark::before,
+  .reg-mark::after {
+    content: '+';
+    position: absolute;
+    font-family: var(--font-jetbrains), monospace;
+    font-size: 0.75rem;
+    line-height: 1;
+    color: var(--ink-soft);
+    opacity: 0.7;
+  }
+
+  .reg-mark::before {
+    top: 0.375rem;
+    left: 0.5rem;
+  }
+
+  .reg-mark::after {
+    bottom: 0.375rem;
+    right: 0.5rem;
+  }
+
+  /* Reveal saat masuk viewport; reduced motion langsung tampil. Keadaan
+     tersembunyi hanya berlaku kalau class `js` sudah dipasang di <html> oleh
+     script tema, supaya tanpa JavaScript seluruh konten tetap terbaca. */
+  html.js .reveal[data-shown='false'] {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  html.js .reveal[data-shown='true'] {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 380ms ease-out,
+      transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  /* Ikon tema: keduanya ada di markup supaya hasil server dan browser identik.
+     Atribut data-theme di <html> yang memilih mana yang tampil. */
+  .theme-icon-sun {
+    display: none;
+  }
+
+  [data-theme='dark'] .theme-icon-sun {
+    display: block;
+  }
+
+  [data-theme='dark'] .theme-icon-moon {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -34,28 +173,9 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
 
-/* Kursor jelas di seluruh elemen interaktif (checklist: cursor-pointer). */
-button,
-a,
-[role='button'],
-select,
-input[type='checkbox'],
-input[type='radio'],
-label[for] {
-  cursor: pointer;
-}
-
-input:disabled,
-textarea:disabled,
-select:disabled,
-button:disabled {
-  cursor: not-allowed;
-}
-
-/* Fokus keyboard terlihat jelas di seluruh komponen (aksesibilitas). */
-:focus-visible {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
 }

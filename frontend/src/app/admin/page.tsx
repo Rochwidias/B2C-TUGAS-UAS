@@ -4,8 +4,11 @@ import AdminShell from '@/components/admin/AdminShell';
 import AdminBoard from '@/components/admin/AdminBoard';
 
 export const metadata: Metadata = {
-  title: 'Papan Pesanan — CraftAI Studio Back Office',
-  description: 'Kanban pesanan CraftAI Studio untuk tim developer dan admin.',
+  title: 'Papan Pesanan',
+  description:
+    'Kanban pesanan CraftAI Studio untuk tim developer dan admin: statistik order, pencarian, filter status, dan pemindahan tahap produksi.',
+  // Panel internal: jangan pernah masuk indeks mesin telusur.
+  robots: { index: false, follow: false },
 };
 
 export default function AdminDashboardPage() {
@@ -13,7 +16,9 @@ export default function AdminDashboardPage() {
     <AdminShell>
       <Suspense
         fallback={
-          <p className="text-sm text-slate-400">Memuat papan pesanan…</p>
+          <p className="border border-rule bg-surface px-3 py-2 font-mono text-[10px] tracking-wide text-ink-soft uppercase">
+            Memuat papan pesanan…
+          </p>
         }
       >
         <AdminBoard />

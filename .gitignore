@@ -11,6 +11,7 @@ venv/
 
 # Runtime database (dibuat otomatis saat server pertama jalan)
 frontend/data/
+backend/data/
 
 # Build output
 .next/
@@ -22,3 +23,5 @@ build/
 *.log
 .DS_Store
 Thumbs.db
+# File lock/temp Office (Word/Excel)
+~$*
