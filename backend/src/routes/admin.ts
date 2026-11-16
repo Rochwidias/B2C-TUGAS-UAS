@@ -41,10 +41,13 @@ router.post('/api/admin/login', (req: Request, res: Response, _next: NextFunctio
   }
 
   // Set-Cookie: admin_session=<token>; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400
+  // Secure hanya di produksi: login lewat https (satu origin via rewrite);
+  // tanpa Secure di dev supaya suite e2e http://localhost tetap jalan.
   res.cookie(ADMIN_SESSION_COOKIE, issueAdminToken(), {
     path: '/',
     httpOnly: true,
     sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
     maxAge: 86400,
   });
   sendOk(res, { ok: true, message: 'Login berhasil.' });

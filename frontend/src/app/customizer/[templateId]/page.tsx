@@ -3,8 +3,10 @@ import { CustomizerClient } from '@/components/shop/CustomizerClient';
 import { Footer } from '@/components/shop/Footer';
 import { Header } from '@/components/shop/Header';
 
-// Base URL backend (lihat src/lib/api.ts) — frontend tidak lagi import DB.
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+// Base URL backend (lihat src/lib/api.ts). SSR fetch harus absolut: pakai
+// NEXT_PUBLIC_API_URL bila diisi, lalu BACKEND_ORIGIN (server-side di Vercel),
+// default localhost untuk dev.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_ORIGIN ?? 'http://localhost:4000';
 
 /** Ambil satu template dari backend. Melempar bila backend tak terjangkau
  *  supaya pemanggil bisa jatuh ke judul generik (perilaku lama tanpa DB). */

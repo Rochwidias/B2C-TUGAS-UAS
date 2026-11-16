@@ -1,4 +1,5 @@
-// Base URL backend Express (port 4000 di dev). Semua fetch ke API memakai
-// konstanta ini, bukan path relatif '/api/...' yang dulu ditangani route
-// handler Next.js di proses yang sama.
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+// Base URL backend Express. Default string kosong = path relatif, yang
+// diteruskan lewat rewrite Next.js (`/api/*` -> BACKEND_ORIGIN) di dev maupun
+// produksi. Dengan begitu produksi berjalan satu origin (Vercel) tanpa CORS,
+// sedangkan NEXT_PUBLIC_API_URL tetap bisa dipakai sebagai override absolut.
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';

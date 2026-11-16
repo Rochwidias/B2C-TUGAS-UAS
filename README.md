@@ -8,6 +8,16 @@ Alur bisnis, skema database, dan rubrik penilaian ada di [`PLAN.md`](PLAN.md).
 Kontrak teknis antar-modul ada di [`docs/SPEC.md`](docs/SPEC.md).
 Artefak Milestone 1 (prototype statis) tetap disimpan di [`index.html`](index.html).
 
+## Deploy
+
+Deploy produksi: **frontend di Vercel** (root directory `frontend`) + **backend
+di Render** (blueprint `render.yaml`). Semua trafik lewat rewrite Next.js (satu
+origin) sehingga tanpa CORS di produksi. Panduan langkah demi langkah:
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+- Vercel — https://vercel.com/new
+- Render — https://render.com (New+ -> Blueprint -> pilih repo)
+
 ## Arsitektur: dua proyek terpisah
 
 ```

@@ -193,8 +193,9 @@ let handle: Db | null = null;
 function openDb(): Db {
   if (handle) return handle;
   // Path dihitung dari cwd frontend/ supaya tetap benar di dev, build, dan
-  // `next start` (dev bisa saja dijalankan dari repo root).
-  const dataDir = path.join(process.cwd(), 'data');
+  // `next start` (dev bisa saja dijalankan dari repo root). Di Render, DB_DIR
+  // menunjuk disk persistent (/var/data) agar data selamat redeploy.
+  const dataDir = process.env.DB_DIR ?? path.join(process.cwd(), 'data');
   const dbPath = path.join(dataDir, 'app.db');
   mkdirSync(dataDir, { recursive: true });
   const db: Db = new DatabaseSync(dbPath);

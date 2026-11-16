@@ -26,8 +26,12 @@ Back-office: `http://localhost:3000/admin` (password default `admin123`,
 diatur lewat `ADMIN_PASSWORD` di **backend**).
 
 Salin `.env.example` ke `.env.local`. Kunci penting: `NEXT_PUBLIC_API_URL`
-(alamat backend, default `http://localhost:4000`). Tanpa `GEMINI_API_KEY` di
-backend, sistem memakai generator lokal dan badge engine menampilkan `local`.
+(alamat backend, opsional — kosong = relatif via rewrite; SSR pakai
+`BACKEND_ORIGIN`). Tanpa `GEMINI_API_KEY` di backend, sistem memakai generator
+lokal dan badge engine menampilkan `local`.
+
+Deploy produksi (Vercel, set `BACKEND_ORIGIN` ke URL Render):
+[`../docs/DEPLOY.md`](../docs/DEPLOY.md).
 
 ## Struktur
 

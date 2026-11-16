@@ -58,3 +58,5 @@ data/app.db            sqlite, auto-create + seed saat pertama diakses
 - Security headers + `X-Powered-By` dihapus; CORS hanya origin frontend.
 
 Kontrak API lengkap: [`../docs/SPEC.md`](../docs/SPEC.md).
+Deploy produksi (Render + Vercel): [`../docs/DEPLOY.md`](../docs/DEPLOY.md)
+— blueprint `render.yaml`, `DB_DIR` untuk disk persistent, dan set `FRONTEND_ORIGIN`.

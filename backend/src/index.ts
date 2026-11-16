@@ -29,6 +29,12 @@ const extraOrigins = (process.env.FRONTEND_ORIGIN ?? '')
 
 const app = express();
 
+// Di belakang proxy Render, setiap request tampak berasal dari IP proxy, yang
+// membuat rate limit per-IP berbagi satu ember. `trust proxy` 1 hop mengembalikan
+// req.ip dari X-Forwarded-For. Hanya dipercaya di production — di dev/test lokal
+// header itu bisa dipalsukan (test_security.py mengandalkan perilaku ini).
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+
 // X-Powered-By disembunyikan (test_security.py memeriksanya).
 app.disable('x-powered-by');
 

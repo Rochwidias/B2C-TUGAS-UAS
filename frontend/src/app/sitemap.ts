@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
-// Base URL backend (lihat src/lib/api.ts): frontend tidak lagi mengakses DB
-// langsung, jadi daftar template diambil lewat fetch ke Express.
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+// Base URL backend (lihat src/lib/api.ts): SSR fetch harus absolut, jadi
+// NEXT_PUBLIC_API_URL lalu BACKEND_ORIGIN (server-side di Vercel), default lokal.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_ORIGIN ?? 'http://localhost:4000';
 
 // Route statis didahulukan, lalu tiap template dapat halaman customizer-nya.
 // Prioritas 0.9 untuk halaman utama karena itu pintu masuk utama layanan.
