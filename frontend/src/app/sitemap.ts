@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { FALLBACK_TEMPLATES, fetchCatalog } from '@/lib/catalog';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
@@ -16,22 +17,37 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/orders`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
   ];
 
-  let templateRoutes: MetadataRoute.Sitemap = [];
+  // Daftar bawaan dulu, supaya sitemap selalu memuat ketiga halaman customizer
+  // walau backend tidak terjangkau. Lalu backend (fetch mutlak di SSR) bila hidup,
+  // lalu fetchCatalog yang jatuh ke data bawaan bila backend mati. Semua
+  // kegagalan fetch ditelan: sitemap tidak boleh ikut tumbang saat build.
+  const ids: string[] = [];
+  const addId = (id: string | undefined): void => {
+    if (id && !ids.includes(id)) ids.push(id);
+  };
+  FALLBACK_TEMPLATES.forEach((template) => addId(template.id));
+
   try {
-    const response = await fetch(`${API_BASE}/api/templates`, { cache: 'no-store' });
+    const response = await fetch(`${API_BASE}/api/templates`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(2500),
+    });
     if (response.ok) {
       const payload = (await response.json()) as { templates?: { id: string }[] };
-      templateRoutes = (payload.templates ?? []).map((template) => ({
-        url: `${SITE_URL}/customizer/${template.id}`,
-        lastModified: now,
-        changeFrequency: 'monthly' as const,
-        priority: 0.8,
-      }));
+      (payload.templates ?? []).forEach((template) => addId(template.id));
     }
   } catch {
-    // Backend mati / belum siap saat build: sitemap tetap valid tanpa rute template.
-    templateRoutes = [];
+    // Backend mati / belum siap saat build: daftar bawaan tetap dipakai.
   }
+
+  (await fetchCatalog()).forEach((template) => addId(template.id));
+
+  const templateRoutes: MetadataRoute.Sitemap = ids.map((id) => ({
+    url: `${SITE_URL}/customizer/${id}`,
+    lastModified: now,
+    changeFrequency: 'monthly' as const,
+    priority: 0.8,
+  }));
 
   return [...staticRoutes, ...templateRoutes];
 }

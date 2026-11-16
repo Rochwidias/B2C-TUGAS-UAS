@@ -5,38 +5,32 @@ import { EmptyBlock } from '@/components/ui/EmptyBlock';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Reveal } from './Reveal';
 import { TemplateCard } from './TemplateCard';
-import { type Template, categoryLabel, readJson } from './types';
-import { API_BASE } from '@/lib/api';
-
-type LoadState =
-  | { phase: 'loading' }
-  | { phase: 'error'; message: string }
-  | { phase: 'ready'; templates: Template[] };
+import { type Template, categoryLabel } from './types';
+import { FALLBACK_TEMPLATES, fetchCatalog } from '@/lib/catalog';
 
 // Katalog = rak cetak: judul ledger, filter bergaris, grid kartu.
 // id="katalog" dan data-testid="template-grid" dipakai navigasi + tes E2E.
+//
+// Kartu dirender dari FALLBACK_TEMPLATES sejak render pertama (SSR ikut
+// membawa daftarnya) supaya katalog langsung terisi walau backend lambat atau
+// tidak terjangkau; fetchCatalog tetap berjalan di latar belakang untuk data
+// terbaru dari server.
 export function TemplateCatalog() {
-  const [state, setState] = useState<LoadState>({ phase: 'loading' });
+  const [templates, setTemplates] = useState<Template[]>(FALLBACK_TEMPLATES);
+  const [loading, setLoading] = useState(true);
   const [active, setActive] = useState('semua');
 
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/templates`)
-          .then((res) => readJson<{ templates: Template[] }>(res))
-      .then((result) => {
-        if (!alive) return;
-        if (result.ok) setState({ phase: 'ready', templates: result.data.templates ?? [] });
-        else setState({ phase: 'error', message: result.error });
-      })
-      .catch(() => {
-        if (alive) setState({ phase: 'error', message: 'Tidak bisa terhubung ke server. Coba muat ulang halaman.' });
-      });
+    fetchCatalog().then((next) => {
+      if (!alive) return;
+      setTemplates(next);
+      setLoading(false);
+    });
     return () => {
       alive = false;
     };
   }, []);
-
-  const templates = useMemo(() => (state.phase === 'ready' ? state.templates : []), [state]);
 
   const categories = useMemo(() => {
     const seen: string[] = [];
@@ -107,52 +101,17 @@ export function TemplateCatalog() {
         </div>
 
         <div className="mt-10 border-t border-rule pt-6">
-          {state.phase === 'loading' && (
-            <div
-              className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+          {loading && (
+            <p
               aria-live="polite"
               aria-busy="true"
+              className="mb-4 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft"
             >
-              <p className="sr-only">Memuat katalog template</p>
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="flex animate-pulse flex-col border border-rule bg-surface"
-                  aria-hidden="true"
-                >
-                  <div className="h-20 border-b border-rule bg-paper" />
-                  <div className="flex flex-col gap-3 p-5">
-                    <div className="h-3 w-24 bg-rule" />
-                    <div className="h-5 w-3/4 bg-rule" />
-                    <div className="h-3 w-full bg-rule" />
-                    <div className="h-3 w-2/3 bg-rule" />
-                    <div className="mt-4 h-11 w-full border border-rule bg-paper" />
-                  </div>
-                </div>
-              ))}
-            </div>
+              Memuat katalog template
+            </p>
           )}
 
-          {state.phase === 'error' && (
-            <div
-              role="alert"
-              className="flex flex-col gap-4 border border-danger bg-surface p-6 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="font-semibold text-danger">Katalog gagal dimuat</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{state.message}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="min-h-11 shrink-0 border border-ink bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-transform hover:-translate-y-px hover:shadow-[2px_2px_0_0_var(--ink)]"
-              >
-                Muat ulang
-              </button>
-            </div>
-          )}
-
-          {state.phase === 'ready' && templates.length === 0 && (
+          {templates.length === 0 && (
             <EmptyState
               icon="0"
               title="Belum ada template aktif"
@@ -168,7 +127,7 @@ export function TemplateCatalog() {
             </EmptyState>
           )}
 
-          {state.phase === 'ready' && templates.length > 0 && visible.length === 0 && (
+          {templates.length > 0 && visible.length === 0 && (
             <div aria-live="polite">
               <EmptyBlock
                 title={`Kategori ${categoryLabel(active)} belum terisi`}
@@ -179,7 +138,7 @@ export function TemplateCatalog() {
             </div>
           )}
 
-          {state.phase === 'ready' && visible.length > 0 && (
+          {visible.length > 0 && (
             <div
               className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
               data-testid="template-grid"

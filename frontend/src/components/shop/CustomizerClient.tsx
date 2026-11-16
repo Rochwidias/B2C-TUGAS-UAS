@@ -19,6 +19,7 @@ import {
   readJson,
 } from './types';
 import { API_BASE } from '@/lib/api';
+import { FALLBACK_TEMPLATES, fetchCatalog } from '@/lib/catalog';
 
 // Batas karakter brief. Dipakai bersama oleh validasi, penghitung, dan
 // placeholder supaya angka maksimum hanya ditulis di satu tempat.
@@ -98,7 +99,12 @@ type OrderState =
 
 export function CustomizerClient({ templateId }: { templateId: string }) {
   const router = useRouter();
-  const [template, setTemplate] = useState<Template | null>(null);
+  // Judul/header langsung terisi dari data bawaan: halaman tidak pernah
+  // menampilkan "Memuat template" walau backend lambat. Data terbaru dari
+  // server menyusul lewat fetchCatalog() di bawah.
+  const [template, setTemplate] = useState<Template | null>(
+    () => FALLBACK_TEMPLATES.find((t) => t.id === templateId) ?? null,
+  );
   const [templateError, setTemplateError] = useState<string | null>(null);
 
   const [brief, setBrief] = useState<Brief>({
@@ -185,45 +191,41 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/templates`)
-      .then((res) => readJson<{ templates: Template[] }>(res))
-      .then((result) => {
-        if (!alive) return;
-        if (!result.ok) {
-          setTemplateError(result.error);
-          return;
-        }
-        const found = (result.data.templates ?? []).find((t) => t.id === templateId);
-        if (!found) {
-          setTemplateError('Template tidak ditemukan. Pilih ulang dari katalog.');
-          return;
-        }
-        setTemplate(found);
-        // Pulihkan draft tersimpan hanya untuk kolom yang masih kosong, lalu
-        // isi preset template bila kolom tetap kosong. Satu updater, satu render.
-        const saved = loadBriefDraft(templateId);
-        setBrief((prev) => {
-          const filled = (v: string | undefined) => typeof v === 'string' && v.trim() !== '';
-          const restored = saved
-            ? {
-                ...prev,
-                brandName: filled(prev.brandName) ? prev.brandName : saved.brandName ?? prev.brandName,
-                tagline: filled(prev.tagline) ? prev.tagline : saved.tagline ?? prev.tagline,
-                description: filled(prev.description) ? prev.description : saved.description ?? prev.description,
-                ctaText: filled(prev.ctaText) ? prev.ctaText : saved.ctaText ?? prev.ctaText,
-                themeColor: saved.themeColor ?? prev.themeColor,
-                toneOfVoice: saved.toneOfVoice ?? prev.toneOfVoice,
-              }
-            : prev;
-          const untouched = [restored.brandName, restored.tagline, restored.description, restored.ctaText].every(
-            (value) => value.trim() === '',
-          );
-          if (!untouched || prev.templateId === templateId) return restored;
-          const preset = PRESET[found.category] ?? PRESET.fnb;
-          return { ...restored, ...preset };
-        });
-      })
-      .catch(() => alive && setTemplateError('Tidak bisa terhubung ke server.'));
+    // Katalog selalu mengembalikan daftar (jatuh ke data bawaan bila backend
+    // tidak terjangkau), jadi hanya id yang benar-benar tak dikenal yang
+    // memunculkan pesan "tidak ditemukan".
+    fetchCatalog().then((templates) => {
+      if (!alive) return;
+      const found = templates.find((t) => t.id === templateId);
+      if (!found) {
+        setTemplateError('Template tidak ditemukan. Pilih ulang dari katalog.');
+        return;
+      }
+      setTemplate(found);
+      // Pulihkan draft tersimpan hanya untuk kolom yang masih kosong, lalu
+      // isi preset template bila kolom tetap kosong. Satu updater, satu render.
+      const saved = loadBriefDraft(templateId);
+      setBrief((prev) => {
+        const filled = (v: string | undefined) => typeof v === 'string' && v.trim() !== '';
+        const restored = saved
+          ? {
+              ...prev,
+              brandName: filled(prev.brandName) ? prev.brandName : saved.brandName ?? prev.brandName,
+              tagline: filled(prev.tagline) ? prev.tagline : saved.tagline ?? prev.tagline,
+              description: filled(prev.description) ? prev.description : saved.description ?? prev.description,
+              ctaText: filled(prev.ctaText) ? prev.ctaText : saved.ctaText ?? prev.ctaText,
+              themeColor: saved.themeColor ?? prev.themeColor,
+              toneOfVoice: saved.toneOfVoice ?? prev.toneOfVoice,
+            }
+          : prev;
+        const untouched = [restored.brandName, restored.tagline, restored.description, restored.ctaText].every(
+          (value) => value.trim() === '',
+        );
+        if (!untouched || prev.templateId === templateId) return restored;
+        const preset = PRESET[found.category] ?? PRESET.fnb;
+        return { ...restored, ...preset };
+      });
+    });
     return () => {
       alive = false;
     };

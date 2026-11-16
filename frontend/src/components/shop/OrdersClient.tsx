@@ -10,13 +10,13 @@ import { Stepper } from '@/components/shop/Stepper';
 import {
   STATUS_STEPS,
   type OrderResponse,
-  type Template,
   formatRupiah,
   readJson,
   statusLabel,
 } from '@/components/shop/types';
 import { EmptyBlock } from '@/components/ui/EmptyBlock';
 import { API_BASE } from '@/lib/api';
+import { fetchCatalog } from '@/lib/catalog';
 
 type TrackState =
   | { phase: 'idle' }
@@ -142,20 +142,20 @@ function TrackForm({ onTracked }: { onTracked: (entry: TrackedOrder) => void }) 
     }
     setState({ phase: 'loading' });
     try {
-      const res = await fetch(`${API_BASE}/api/orders?number=${encodeURIComponent(value)}`);
-      const result = await readJson<OrderResponse>(res);
-      if (!result.ok) {
-        setState({ phase: 'error', message: result.error });
+      const orderRes = await fetch(`${API_BASE}/api/orders?number=${encodeURIComponent(value)}`).then((r) =>
+        readJson<OrderResponse>(r),
+      );
+      if (!orderRes.ok) {
+        setState({ phase: 'error', message: orderRes.error });
         return;
       }
-      const tplId = result.data.order.template_id;
-      let templateName: string | null = null;
-      const tplRes = await fetch(`${API_BASE}/api/templates`).then((r) => readJson<{ templates: Template[] }>(r));
-      if (tplRes.ok) {
-        templateName = (tplRes.data.templates ?? []).find((t) => t.id === tplId)?.name ?? null;
-      }
-      onTracked(toTracked(result.data, templateName));
-      setState({ phase: 'found', result: result.data, templateName });
+      // Nama template diambil lewat katalog: jatuh ke data bawaan bila backend
+      // tidak terjangkau, supaya hasil lacak tetap lengkap.
+      const templates = await fetchCatalog();
+      const templateName =
+        templates.find((t) => t.id === orderRes.data.order.template_id)?.name ?? null;
+      onTracked(toTracked(orderRes.data, templateName));
+      setState({ phase: 'found', result: orderRes.data, templateName });
       router.replace(`/orders?number=${encodeURIComponent(value)}`, { scroll: false });
     } catch {
       setState({ phase: 'error', message: 'Jaringan terputus. Coba beberapa saat lagi.' });

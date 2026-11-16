@@ -9,8 +9,9 @@ import { Footer } from '@/components/shop/Footer';
 import { Header } from '@/components/shop/Header';
 import { Stepper } from '@/components/shop/Stepper';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { type OrderResponse, type Template, formatRupiah, readJson, statusLabel } from '@/components/shop/types';
+import { type OrderResponse, formatRupiah, readJson, statusLabel } from '@/components/shop/types';
 import { API_BASE } from '@/lib/api';
+import { fetchCatalog } from '@/lib/catalog';
 
 type LoadState =
   | { phase: 'loading' }
@@ -83,17 +84,16 @@ function OrderDetailInner() {
     let alive = true;
     Promise.all([
       fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`).then((r) => readJson<OrderResponse>(r)),
-      fetch(`${API_BASE}/api/templates`).then((r) => readJson<{ templates: Template[] }>(r)),
+      fetchCatalog(),
     ])
-      .then(([orderRes, tplRes]) => {
+      .then(([orderRes, templates]) => {
         if (!alive) return;
         if (!orderRes.ok) {
           setState({ phase: 'error', message: orderRes.error });
           return;
         }
-        const templateName = tplRes.ok
-          ? (tplRes.data.templates ?? []).find((t) => t.id === orderRes.data.order.template_id)?.name ?? null
-          : null;
+        const templateName =
+          templates.find((t) => t.id === orderRes.data.order.template_id)?.name ?? null;
         setState({ phase: 'ready', data: orderRes.data, templateName });
       })
       .catch(() => alive && setState({ phase: 'error', message: 'Tidak bisa terhubung ke server.' }));
