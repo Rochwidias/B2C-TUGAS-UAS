@@ -1,76 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { EmptyBlock } from '@/components/ui/EmptyBlock';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Reveal } from './Reveal';
 import { TemplateCard } from './TemplateCard';
-import { type PackageOption, type Template, categoryLabel, formatRupiah } from './types';
-import { FALLBACK_TEMPLATES, fetchCatalogResult } from '@/lib/catalog';
-import { fetchPackages } from '@/lib/packages';
+import { type PackageOption, type Template, categoryLabel } from './types';
+import { CATALOG_TEMPLATES } from '@/lib/catalog';
+import { PACKAGES } from '@/lib/packages';
 
 // Urutan filter mengikuti segmen yang dilayani (docs/REDESIGN.md §6): label
-// persis "Semua | Kuliner | Kreator | Toko Online". Kategori lain yang datang
-// dari server tetap tampil setelah ketiganya.
+// persis "Semua | Kuliner | Kreator | Toko Online". Kategori lain tetap tampil
+// setelah ketiganya.
 const FILTER_ORDER = ['Kuliner', 'Kreator', 'Toko Online'];
 
 // Katalog = rak contoh poster: judul ledger, filter bergaris, grid kartu.
 // id="katalog" dan data-testid="template-grid" dipakai navigasi + tes E2E.
-//
-// Daftar bawaan dipakai sebagai isi awal supaya SSR tidak kosong; begitu
-// fetch selesai, state menjadi "ready" atau "error" — kegagalan server TIDAK
-// ditelan diam-diam (docs/REDESIGN.md §12), melainkan ditampilkan lengkap
-// dengan tombol coba lagi.
+// Data statis dari CATALOG_TEMPLATES (docs/FRONTEND-ONLY.md) — tidak ada
+// fetch, tidak ada state loading/error.
 export function TemplateCatalog() {
-  const [templates, setTemplates] = useState<Template[]>(FALLBACK_TEMPLATES);
-  const [packages, setPackages] = useState<PackageOption[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [error, setError] = useState<string | null>(null);
+  const templates: Template[] = CATALOG_TEMPLATES;
   const [active, setActive] = useState('semua');
-
-  // Ref penanda komponen masih terpasang: hasil fetch telat tidak boleh
-  // menulis state setelah unmount (navigasi kilat antar halaman).
-  const aliveRef = useRef(true);
-
-  // Satu jalur pemuatan untuk render awal maupun tombol "coba lagi", supaya
-  // perilaku state error identik di keduanya.
-  const load = useCallback(async () => {
-    setStatus('loading');
-    const [catalog, pkgResult] = await Promise.all([fetchCatalogResult(), fetchPackages()]);
-    if (!aliveRef.current) return;
-    setTemplates(catalog.templates);
-    if (pkgResult.ok) setPackages(pkgResult.packages);
-    if (catalog.ok) {
-      setStatus('ready');
-      setError(null);
-    } else {
-      setStatus('error');
-      setError(catalog.error ?? 'Katalog tidak bisa dimuat dari server.');
-    }
-  }, []);
-
-  // Pemuatan awal memakai rantai promise supaya tidak ada setState sinkron di
-  // dalam effect (react-hooks/set-state-in-effect); `load` tetap dipakai tombol
-  // "coba lagi" dari event handler.
-  useEffect(() => {
-    aliveRef.current = true;
-    Promise.all([fetchCatalogResult(), fetchPackages()]).then(([catalog, pkgResult]) => {
-      if (!aliveRef.current) return;
-      setTemplates(catalog.templates);
-      if (pkgResult.ok) setPackages(pkgResult.packages);
-      if (catalog.ok) {
-        setStatus('ready');
-        setError(null);
-      } else {
-        setStatus('error');
-        setError(catalog.error ?? 'Katalog tidak bisa dimuat dari server.');
-      }
-    });
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
-
 
   const categories = useMemo(() => {
     const seen: string[] = [];
@@ -91,7 +40,7 @@ export function TemplateCatalog() {
 
   const packageFor = (template: Template): PackageOption | null =>
     template.recommendedPackage
-      ? (packages.find((pkg) => pkg.key === template.recommendedPackage) ?? null)
+      ? (PACKAGES.find((pkg) => pkg.key === template.recommendedPackage) ?? null)
       : null;
 
   return (
@@ -145,56 +94,10 @@ export function TemplateCatalog() {
         </div>
 
         <div className="mt-10 border-t border-rule pt-6">
-          {/* State error jujur: isi katalog tetap terbaca, tetapi kegagalan
-              server disebut apa adanya dan bisa dicoba ulang. */}
-          {status === 'error' && (
-            <div
-              role="alert"
-              className="mb-6 flex flex-col gap-3 border border-danger bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">
-                  Katalog belum terhubung ke server
-                </p>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
-                  {error} Kartu di bawah memakai contoh bawaan, jadi harga dan rekomendasi paket
-                  mungkin belum yang terbaru.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void load()}
-                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
-              >
-                Coba lagi
-              </button>
-            </div>
-          )}
-
-          {status === 'loading' && (
-            <p
-              aria-live="polite"
-              aria-busy="true"
-              className="mb-4 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft"
-            >
-              Memuat contoh poster
-            </p>
-          )}
-
           {templates.length === 0 && (
-            <EmptyState
-              icon="0"
-              title="Belum ada contoh poster aktif"
-              description="Tabel template masih kosong atau seluruh baris berstatus nonaktif. Muat ulang setelah data diisi lewat panel admin."
-            >
-              <button
-                type="button"
-                onClick={() => void load()}
-                className="mt-4 min-h-11 border border-ink bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-transform hover:-translate-y-px hover:shadow-[2px_2px_0_0_var(--ink)]"
-              >
-                Muat ulang
-              </button>
-            </EmptyState>
+            <p className="font-mono text-[11px] leading-relaxed text-ink-soft">
+              Daftar contoh poster kosong.
+            </p>
           )}
 
           {templates.length > 0 && visible.length === 0 && (
@@ -224,11 +127,11 @@ export function TemplateCatalog() {
           <span className="border border-rule px-1.5 py-0.5 uppercase tracking-wide">Catatan</span>
           <span>
             Harga pada kartu adalah harga satuan per poster. Paket hemat, estimasi waktu, dan
-            garansi ditampilkan pada bagian harga di bawah, diambil dari server.
+            garansi ditampilkan pada bagian harga di bawah.
           </span>
-          {packages.length > 0 && (
+          {PACKAGES.length > 0 && (
             <span className="text-ok">
-              Paket terbaru: {packages.map((p) => `${p.name} ${formatRupiah(p.price)}`).join(' / ')}
+              Paket tersedia: {PACKAGES.map((p) => `${p.name}`).join(' / ')}
             </span>
           )}
         </p>

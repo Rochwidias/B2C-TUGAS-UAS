@@ -2,16 +2,17 @@
 
 // Editor konten poster untuk back-office. AI sudah ditarik dari alur: konten
 // (badge, headline, subheadline, tombol ajakan, tiga poin, warna, kontras)
-// disusun dan disimpan manual oleh admin lewat PUT /api/admin/orders/[id]/poster.
-// Simpan menulis `engine = manual` di sisi server, lalu halaman induk di-refresh
-// lewat event 'admin:order-updated' seperti form status.
+// disusun manual oleh admin dan disimpan lewat savePoster dari store lokal —
+// store menambah draft `engine: 'manual'`, menulis log, dan menyebar event
+// `craftai:recent-changed` sehingga halaman induk menyegarkan sendiri datanya.
 
 import { useState, type FormEvent, type ReactNode } from 'react';
-import SessionExpired from './SessionExpired';
 import PosterPreview from './PosterPreview';
-import { Spinner } from '@/components/ui/Feedback';
 import { useToast } from '@/components/ui/Toast';
-import { API_BASE } from '@/lib/api';
+import { savePoster } from '@/lib/orders-store';
+// Konten yang disimpan memakai skema lengkap milik store/shop (poster + points
+// wajib), sedangkan tipe Draft admin membolehkan keduanya kosong (bentuk lama).
+import type { Draft as StoreDraft } from '@/components/shop/types';
 import type { Draft, DraftBrief, DraftPoint } from './types';
 
 // Batas teks yang sama dengan yang dipakai backend (docs/WHATSAPP-FLOW.md):
@@ -33,32 +34,33 @@ type PosterTextKey = keyof PosterText;
 const EMPTY_POSTER: PosterText = { badge: '', headline: '', subheadline: '', ctaText: '' };
 
 interface PosterEditorProps {
-  /** id order pada rute /api/admin/orders/[id]/poster. */
+  /** id order di penyimpanan lokal. */
   orderId: string;
-  /** Konten poster terakhir dari server; null bila order ini belum pernah diedit. */
-  content: Draft | null;
-  /** Brief customer dipakai sebagai dasar brand bila konten belum ada. */
+  /** Konten poster terakhir (draft terakhir); null bila belum pernah diedit. */
+  content: StoreDraft | null;
+  /** Brief asli customer dipakai sebagai dasar brand bila konten belum ada. */
   brief: DraftBrief | null;
-  /** Tautan ekspor source code milik draft terpilih; null bila belum ada draft. */
-  exportHref?: string | null;
+  /** Nama kontak customer — fallback nama brand bila brief tidak mengisinya. */
+  contactName: string;
 }
 
 /**
- * Isi editor dari konten tersimpan bila ada, kalau tidak dari brief customer.
- * Bentuk hasilnya selalu lengkap (poster + tepat 3 poin) supaya payload PUT
- * memenuhi skema draft apa pun kondisi awalnya.
+ * Isi editor dari konten tersimpan bila ada, kalau tidak dari brief customer
+ * (brand.name = brief.brandName ?? contact_name). Bentuk hasilnya selalu
+ * lengkap (poster + tepat 3 poin) supaya konten yang disimpan selalu memenuhi
+ * skema draft apa pun kondisi awalnya.
  */
-function initialContent(content: Draft | null, brief: DraftBrief | null): Draft {
+function initialContent(content: StoreDraft | null, brief: DraftBrief | null, contactName: string): StoreDraft {
   const head = content?.poster ?? content?.heroSection ?? null;
   const points = (content?.points ?? content?.features ?? []).slice(0, 3);
   return {
     brand: {
-      name: content?.brand?.name?.trim() || brief?.brandName?.trim() || '',
+      name: content?.brand?.name?.trim() || brief?.brandName?.trim() || contactName.trim(),
       tagline: content?.brand?.tagline?.trim() || brief?.tagline?.trim() || '',
       about: content?.brand?.about?.trim() || brief?.description?.trim() || '',
     },
     theme: {
-      primaryColor: content?.theme?.primaryColor?.trim() || '#7c3aed',
+      primaryColor: content?.theme?.primaryColor?.trim() || '#8b5cf6',
       accentColor: content?.theme?.accentColor?.trim() || '#6d28d9',
       fontPairing: content?.theme?.fontPairing?.trim() || 'Inter + Fraunces',
     },
@@ -143,25 +145,27 @@ function TextInput({
   );
 }
 
-export default function PosterEditor({ orderId, content, brief, exportHref }: PosterEditorProps) {
+export default function PosterEditor({ orderId, content, brief, contactName }: PosterEditorProps) {
   const toast = useToast();
-  const [draft, setDraft] = useState<Draft>(() => initialContent(content, brief));
-  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<StoreDraft>(() => initialContent(content, brief, contactName));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
-  const [expired, setExpired] = useState(false);
   // Tanda tangan payload terakhir yang berhasil disimpan: dipakai untuk menonaktifkan
   // tombol simpan saat tidak ada perubahan, tanpa effect render berantai.
-  const [persisted, setPersisted] = useState<string>(() => JSON.stringify(initialContent(content, brief)));
+  const [persisted, setPersisted] = useState<string>(() =>
+    JSON.stringify(initialContent(content, brief, contactName)),
+  );
 
-  // Sinkronkan dengan data segar dari server setiap kali halaman me-refresh
+  // Sinkronkan dengan data segar dari store setiap kali halaman me-refresh
   // setelah simpan status/delivery — lokal tetap menampilkan nilai paling baru.
   const [prevContent, setPrevContent] = useState(content);
   const [prevBrief, setPrevBrief] = useState(brief);
-  if (content !== prevContent || brief !== prevBrief) {
+  const [prevContact, setPrevContact] = useState(contactName);
+  if (content !== prevContent || brief !== prevBrief || contactName !== prevContact) {
     setPrevContent(content);
     setPrevBrief(brief);
-    const next = initialContent(content, brief);
+    setPrevContact(contactName);
+    const next = initialContent(content, brief, contactName);
     setDraft(next);
     setPersisted(JSON.stringify(next));
   }
@@ -212,45 +216,28 @@ export default function PosterEditor({ orderId, content, brief, exportHref }: Po
     setSaved(null);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (unchanged) {
       setError('Tidak ada perubahan untuk disimpan.');
       return;
     }
-    setBusy(true);
     setError(null);
     setSaved(null);
-    setExpired(false);
-    try {
-      const response = await fetch(`${API_BASE}/api/admin/orders/${orderId}/poster`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: draft }),
-        credentials: 'include',
-      });
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (response.status === 401) {
-        setExpired(true);
-        toast.error('Sesi berakhir, silakan login ulang', 'Konten poster tidak disimpan.');
-        return;
-      }
-      if (!response.ok) {
-        throw new Error(payload?.error ?? `Gagal menyimpan (HTTP ${response.status})`);
-      }
-      setPersisted(signature);
-      setSaved('Konten poster tersimpan sebagai penyuntingan manual.');
-      toast.success('Konten poster tersimpan', 'Ditulis ke order sebagai konten manual.');
-      // Halaman induk me-refresh data & log; pesan sukses tetap terbaca karena
-      // refresh tidak me-mount ulang form ini.
-      window.dispatchEvent(new CustomEvent('admin:order-updated'));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan tak terduga.';
+
+    const updated = savePoster(orderId, draft);
+    if (!updated) {
+      const message = 'Order tidak ditemukan di penyimpanan lokal.';
       setError(message);
       toast.error('Gagal menyimpan konten poster', message);
-    } finally {
-      setBusy(false);
+      return;
     }
+
+    setPersisted(signature);
+    setSaved('Konten poster tersimpan sebagai penyuntingan manual.');
+    toast.success('Konten poster tersimpan', 'Ditulis ke order lokal sebagai draft manual.');
+    // Halaman induk memantau RECENT_EVENT dari store, jadi data & log segar
+    // tanpa navigasi; pesan sukses tetap terbaca karena form tidak di-mount ulang.
   }
 
   const primaryContrast = contrastLabel(draft.theme.primaryColor);
@@ -265,22 +252,12 @@ export default function PosterEditor({ orderId, content, brief, exportHref }: Po
             02
           </span>
         </h2>
-        {exportHref ? (
-          <a
-            href={exportHref}
-            download
-            aria-label="Export Clean Source Code untuk draft terpilih"
-            className="flex min-h-11 items-center border border-ink bg-ink px-3 text-[11.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Export Clean Source Code
-          </a>
-        ) : null}
       </div>
 
       <p className="border-b border-rule px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
-        Semua kolom disusun manual — tidak ada generator otomatis. Simpan menulis konten ke order
-        dengan status <code className="font-mono text-ink">manual</code> dan tercatat di log sebagai{' '}
-        <code className="font-mono text-ink">poster.edited</code>.
+        Semua kolom disusun manual — tidak ada generator otomatis. Simpan menambahkan konten ke
+        order dengan <code className="font-mono text-ink">engine: manual</code> di penyimpanan lokal
+        dan tercatat di riwayat log order.
       </p>
 
       {/* Kepala poster: badge, headline, subheadline, tombol ajakan. */}
@@ -437,19 +414,17 @@ export default function PosterEditor({ orderId, content, brief, exportHref }: Po
       <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
         <button
           type="submit"
-          disabled={busy || unchanged}
-          aria-busy={busy}
+          disabled={unchanged}
           className="flex min-h-11 items-center justify-center gap-2 border border-ink bg-ink px-3.5 text-[11.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent disabled:cursor-not-allowed disabled:border-rule disabled:bg-transparent disabled:text-ink-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          {busy ? <Spinner /> : null}
-          {busy ? 'Menyimpan…' : 'Simpan konten poster'}
+          Simpan konten poster
         </button>
-        {saved && !expired ? (
+        {saved ? (
           <p role="status" className="text-[11px] font-medium text-ok">
             {saved}
           </p>
         ) : null}
-        {error && !expired ? (
+        {error ? (
           <p role="alert" className="text-[11px] font-medium text-danger">
             {error}
           </p>
@@ -460,12 +435,6 @@ export default function PosterEditor({ orderId, content, brief, exportHref }: Po
           </p>
         ) : null}
       </div>
-
-      {expired ? (
-        <div className="border-t border-rule p-3">
-          <SessionExpired from={`/admin/orders/${orderId}`} compact />
-        </div>
-      ) : null}
     </form>
   );
 }

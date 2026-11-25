@@ -1,8 +1,8 @@
 'use client';
 
 // Tombol "Chat via WhatsApp" — dipakai halaman pelacakan dan petunjuk pesanan
-// terakhir. Pesannya dibuka dari GET /api/contact, jadi nomor yang dihubungi
-// selalu nomor resmi dari env WHATSAPP_NUMBER (bukan nomor pelanggan).
+// terakhir. Nomor yang dihubungi selalu nomor resmi dari env
+// NEXT_PUBLIC_WHATSAPP_NUMBER (bukan nomor pelanggan).
 
 import { whatsappStageHint } from './types';
 import { contactChatUrl, useContact } from './whatsapp';

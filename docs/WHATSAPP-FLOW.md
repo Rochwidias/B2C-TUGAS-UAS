@@ -1,3 +1,10 @@
+> **CATATAN (2026-11-25): backend sudah DIHAPUS TOTAL.** Folder `backend/` dan
+> `render.yaml` tidak ada lagi. Kontrak yang berlaku sekarang:
+> [`FRONTEND-ONLY.md`](FRONTEND-ONLY.md) — frontend-only, penyimpanan
+> `localStorage` per perangkat, tanpa API dan tanpa database. Semua bagian
+> dokumen ini yang menyebut API, backend, database, rate limit, atau
+> `render.yaml` bersifat **HISTORIS** dan tidak lagi diimplementasikan.
+
 # Kontrak: Ubah alur ke WhatsApp + buang AI (2026-11-25)
 
 Keputusan pemilik proyek:

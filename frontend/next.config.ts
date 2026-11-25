@@ -12,9 +12,6 @@ const securityHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 ];
 
-// Base URL backend Express (port 4000 di dev, bisa diubah via BACKEND_ORIGIN).
-const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN ?? 'http://localhost:4000';
-
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
@@ -48,12 +45,6 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
     ];
-  },
-  // Route /api/* tidak lagi ditangani Next.js — diteruskan ke backend Express.
-  // Ini menjaga kompatibilitas URL (mis. /api/export/:id, lacak order) dan
-  // membuat frontend tetap bisa diakses di satu origin tanpa CORS di produksi.
-  async rewrites() {
-    return [{ source: '/api/:path*', destination: `${BACKEND_ORIGIN}/api/:path*` }];
   },
   async redirects() {
     return [

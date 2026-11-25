@@ -6,11 +6,8 @@ import { useToast } from '@/components/ui/Toast';
 import {
   THEME_OPTIONS,
   type Brief,
-  type Order,
+  type OrderBriefPayload,
   type OrderContact,
-  type PackageOption,
-  type Template,
-  type ThemeColorKey,
   categoryLabel,
   formatRupiah,
   packageEta,
@@ -19,8 +16,9 @@ import {
   whatsappStageHint,
 } from './types';
 import { contactChatUrl, useContact } from './whatsapp';
-import { FALLBACK_TEMPLATES, fetchCatalogResult } from '@/lib/catalog';
-import { fetchPackages } from '@/lib/packages';
+import { getTemplateById } from '@/lib/catalog';
+import { PACKAGES } from '@/lib/packages';
+import { createOrder, setLastOrder } from '@/lib/orders-store';
 
 // Batas karakter brief. Dipakai bersama oleh validasi, penghitung, dan
 // placeholder supaya angka maksimum hanya ditulis di satu tempat.
@@ -113,35 +111,23 @@ function fieldClass(invalid: boolean): string {
   return invalid ? `${inputClass} border-danger` : inputClass;
 }
 
-// Status pesanan: idle → loading → error, atau selesai dengan nomor pesanan
-// plus tautan wa.me dari respons (docs/WHATSAPP-FLOW.md §Baru).
+// Status pesanan: idle → error, atau selesai dengan nomor pesanan plus tautan
+// wa.me (docs/FRONTEND-ONLY.md — order dicatat di penyimpanan lokal).
 type OrderState =
   | { phase: 'idle' }
-  | { phase: 'loading' }
   | { phase: 'error'; message: string }
   | {
       phase: 'done';
       orderNumber: string;
       orderId: string;
       status: string;
-      /** Kosong bila backend tidak mengirim; tombol jatuh ke kontak resmi. */
+      /** Tautan WhatsApp dengan pesan berisi nomor order. */
       whatsappUrl: string;
     };
 
-type PackagesState =
-  | { phase: 'loading' }
-  | { phase: 'ready'; packages: PackageOption[] }
-  | { phase: 'error'; message: string };
-
 export function CustomizerClient({ templateId }: { templateId: string }) {
-  // Judul/header langsung terisi dari data bawaan: halaman tidak pernah
-  // menampilkan "Memuat template" walau backend lambat. Data terbaru dari
-  // server menyusul lewat fetchCatalogResult() di bawah.
-  const [template, setTemplate] = useState<Template | null>(
-    () => FALLBACK_TEMPLATES.find((t) => t.id === templateId) ?? null,
-  );
-  const [templateError, setTemplateError] = useState<string | null>(null);
-  const [catalogNote, setCatalogNote] = useState<string | null>(null);
+  // Template dari katalog statis: tidak pernah "memuat", langsung tersedia.
+  const template = getTemplateById(templateId);
 
   const [brief, setBrief] = useState<Brief>({
     templateId,
@@ -154,25 +140,31 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
   });
 
   const [order, setOrder] = useState<OrderState>({ phase: 'idle' });
-  const [pkgState, setPkgState] = useState<PackagesState>({ phase: 'loading' });
-  const [pkgKey, setPkgKey] = useState<string | null>(null);
   const [contact, setContact] = useState({ name: '', whatsapp: '', email: '' });
-  // Nomor WA resmi dari GET /api/contact — pembanding bila respons pesanan
-  // tidak membawa whatsappUrl.
+  // Kontak WhatsApp resmi — konstanta statis dari env publik.
   const contactInfo = useContact();
   // true setelah pengguna menyentuh sebuah field; pesan validasi baru muncul
   // setelah itu supaya formulir tidak terlihat "merah" sebelum diisi.
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const toast = useToast();
-  // Rekomendasi paket dari data template, dibaca lewat ref supaya pemilihan
-  // awal tidak memicu fetch paket kedua saat data template menyusul.
-  const recommendedRef = useRef<string | null>(null);
+  // Paket dari daftar statis; pilihan awal mengikuti rekomendasi segmen bila ada.
+  const recommended = template?.recommendedPackage;
+  const [pkgKey, setPkgKey] = useState<string>(
+    recommended && PACKAGES.some((pkg) => pkg.key === recommended)
+      ? recommended
+      : (PACKAGES[0]?.key ?? ''),
+  );
 
   // Simpan draft setiap kali brief berubah (debounce ringan) agar tidak hilang.
   // Simpanan terakhir WAJIB di-flush saat unmount, bukan dibatalkan, supaya
   // draft yang diketik tepat sebelum pindah halaman tidak hilang.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const briefRef = useRef(brief);
+  // true setelah draft tersimpan selesai dipulihkan oleh effect restore.
+  // Semua penulisan draft WAJIB menunggu flag ini: tanpa itu, unmount
+  // StrictMode (double-mount di dev) menimpa draft tersimpan dengan isian
+  // kosong awal sebelum pemulihan sempat membacanya.
+  const hydratedRef = useRef(false);
 
   // Ref hanya untuk dibaca di handler unmount/visibilitychange, jadi
   // penugasannya dilakukan di effect (bukan saat render).
@@ -181,6 +173,9 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
   }, [brief]);
 
   const persistBrief = () => {
+    // Belum pulih → belum ada isian pengguna; menulis sekarang berarti
+    // menimpa draft tersimpan dengan kosong (bug test_05).
+    if (!hydratedRef.current) return;
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
@@ -196,6 +191,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
+      if (!hydratedRef.current) return;
       try {
         localStorage.setItem(briefKey(templateId), JSON.stringify(brief));
       } catch {
@@ -222,31 +218,19 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     window.addEventListener('pagehide', persistBrief);
     return () => {
       document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', persistBrief);
+      document.removeEventListener('pagehide', persistBrief);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
+  // Pulihkan draft tersimpan hanya untuk kolom yang masih kosong, lalu isi
+  // preset segmen bila semua kolom tetap kosong. Satu updater, satu render.
+  // Pemulihan dibungkus microtask supaya tidak ada setState sinkron di effect
+  // (react-hooks/set-state-in-effect), sama seperti pola pemuatan data async.
   useEffect(() => {
     let alive = true;
-    // fetchCatalogResult membedakan "server gagal" dan "id tak dikenal",
-    // sehingga kegagalan katalog tidak dianggap template tidak ada.
-    fetchCatalogResult().then((result) => {
+    Promise.resolve().then(() => {
       if (!alive) return;
-      const found = result.templates.find((t) => t.id === templateId);
-      if (!found) {
-        setTemplateError('Template tidak ditemukan. Pilih ulang dari katalog.');
-        return;
-      }
-      setTemplate(found);
-      recommendedRef.current = found.recommendedPackage ?? null;
-      setCatalogNote(
-        result.ok
-          ? null
-          : `${result.error ?? 'Katalog tidak terhubung ke server.'} Contoh bawaan dipakai sementara.`,
-      );
-      // Pulihkan draft tersimpan hanya untuk kolom yang masih kosong, lalu
-      // isi preset segmen bila kolom tetap kosong. Satu updater, satu render.
       const saved = loadBriefDraft(templateId);
       setBrief((prev) => {
         const filled = (v: string | undefined) => typeof v === 'string' && v.trim() !== '';
@@ -265,56 +249,16 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
           (value) => value.trim() === '',
         );
         if (!untouched || prev.templateId === templateId) return restored;
-        const preset = PRESET[found.category] ?? PRESET.kuliner;
+        const preset = PRESET[template?.category ?? 'kuliner'] ?? PRESET.kuliner;
         return { ...restored, ...preset };
       });
+      // Pemulihan selesai — sejak sini penulisan draft aman.
+      hydratedRef.current = true;
     });
     return () => {
       alive = false;
     };
-  }, [templateId]);
-
-  // Kartu paket dari GET /api/packages: satu-satunya sumber harga, kuota,
-  // estimasi, dan garansi di halaman ini (docs/REDESIGN.md §2).
-  const loadPackages = async () => {
-    setPkgState({ phase: 'loading' });
-    const result = await fetchPackages();
-    if (!result.ok) {
-      setPkgState({ phase: 'error', message: result.error ?? 'Daftar paket tidak bisa dimuat.' });
-      return;
-    }
-    setPkgState({ phase: 'ready', packages: result.packages });
-    // Pilihan awal mengikuti rekomendasi paket untuk segmen ini bila ada.
-    setPkgKey((current) => {
-      if (current && result.packages.some((pkg) => pkg.key === current)) return current;
-      const suggested = template?.recommendedPackage;
-      const preferred = suggested ? result.packages.find((pkg) => pkg.key === suggested) : undefined;
-      return (preferred ?? result.packages[0]).key;
-    });
-  };
-
-  // Pemuatan awal kartu paket memakai rantai promise (tanpa setState sinkron
-  // di dalam effect); loadPackages() tetap dipakai tombol coba lagi.
-  useEffect(() => {
-    let alive = true;
-    fetchPackages().then((result) => {
-      if (!alive) return;
-      if (!result.ok) {
-        setPkgState({ phase: 'error', message: result.error ?? 'Daftar paket tidak bisa dimuat.' });
-        return;
-      }
-      setPkgState({ phase: 'ready', packages: result.packages });
-      setPkgKey((current) => {
-        if (current && result.packages.some((pkg) => pkg.key === current)) return current;
-        const suggested = recommendedRef.current;
-        const preferred = suggested ? result.packages.find((pkg) => pkg.key === suggested) : undefined;
-        return (preferred ?? result.packages[0]).key;
-      });
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  }, [templateId, template?.category]);
 
   function update<K extends keyof Brief>(key: K, value: Brief[K]) {
     setBrief((prev) => ({ ...prev, [key]: value }));
@@ -345,9 +289,9 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
   const briefValid = Object.keys(errors).length === 0;
 
-  // Satu aksi kirim: pesanan dicatat di web, lalu konfirmasi dan serah terima
-  // berpindah ke chat WhatsApp (docs/WHATSAPP-FLOW.md §Alur baru).
-  async function submitOrder(e: React.FormEvent) {
+  // Satu aksi kirim: pesanan dicatat di store lokal, lalu konfirmasi dan serah
+  // terima berpindah ke chat WhatsApp (docs/FRONTEND-ONLY.md).
+  function submitOrder(e: React.FormEvent) {
     e.preventDefault();
     // Tandai semua field tersentuh agar pesan validasi tampil saat submit diblokir.
     setTouched({
@@ -377,96 +321,81 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
       toast.error('Format email belum benar', 'Contoh: nama@email.com');
       return;
     }
-    const selected =
-      pkgState.phase === 'ready' ? pkgState.packages.find((pkg) => pkg.key === pkgKey) : null;
+    const selected = PACKAGES.find((pkg) => pkg.key === pkgKey) ?? null;
     if (!selected) {
       setOrder({ phase: 'error', message: 'Pilih paket yang tersedia sebelum mengirim pesanan.' });
-      toast.error('Paket belum dipilih', 'Muat ulang daftar paket lalu pilih salah satu.');
+      toast.error('Paket belum dipilih', 'Pilih salah satu paket lalu kirim ulang.');
       return;
     }
-    setOrder({ phase: 'loading' });
-    try {
-      const orderContact: OrderContact = { name, whatsapp, ...(email ? { email } : {}) };
-      // Simulasi pesanan lokal (frontend-only, tanpa backend). Nomor order dibangkitkan
-      // di browser dan order lengkap disimpan ke localStorage sehingga halaman
-      // /orders dan /orders/[id] bisa menampilkannya tanpa memanggil backend.
-      const orderNumber = `ATH-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const orderId = `aether-${Date.now()}`;
-      const now = new Date().toISOString();
-      const createdOrder: Order = {
-        id: orderId,
-        order_number: orderNumber,
-        template_id: templateId,
-        status: 'draft',
-        payment_status: 'belum_dibayar',
-        total_price: selected.price,
-        contact_name: orderContact.name,
-        contact_whatsapp: orderContact.whatsapp,
-        contact_email: orderContact.email ?? '',
-        package_name: selected.name,
-        package_key: selected.key,
-        quota: selected.quota,
-        live_website_url: null,
-        download_zip_url: null,
-        dev_note: null,
-        created_at: now,
-        updated_at: now,
-      };
-      try {
-        const raw = localStorage.getItem('aether-orders');
-        const orders: Order[] = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(orders)) throw new Error('format order tersimpan rusak');
-        orders.unshift(createdOrder);
-        localStorage.setItem('aether-orders', JSON.stringify(orders.slice(0, 50)));
-      } catch {
-        // Penyimpanan diblokir: lanjutkan tanpa riwayat order.
-      }
-      try {
-        localStorage.setItem(
-          'craftai-last-order',
-          JSON.stringify({ number: orderNumber, id: orderId, at: Date.now(), status: 'draft' }),
-        );
-        window.dispatchEvent(new Event('craftai:last-order-changed'));
-      } catch {
-        // Penyimpanan diblokir: tombol WhatsApp tetap jalan tanpa pintasan.
-      }
-      const whatsappUrl = (contactChatUrl(contactInfo, orderNumber, whatsappStageHint('draft')) ?? '');
-      setOrder({ phase: 'done', orderNumber, orderId, status: 'draft', whatsappUrl });
-      toast.success(
-        'Pesanan tercatat',
-        `Nomor ${orderNumber} masuk antrean editor. Konfirmasi berjalan di WhatsApp.`,
-      );
-    } catch {
-      setOrder({ phase: 'error', message: 'Jaringan terputus saat mengirim pesanan. Coba lagi.' });
-      toast.error('Tidak bisa terhubung', 'Periksa koneksi Anda lalu coba lagi.');
-    }
+    const orderContact: OrderContact = { name, whatsapp, ...(email ? { email } : {}) };
+    // Susun OrderBriefPayload: medan kontrak merekLokasi/segmenTarget/suasanaMerek/
+    // aksiUtama/nadaRekaman diisi dari isian form yang tersedia, di samping medan
+    // brief lama supaya ringkasan di back-office tetap terbaca lengkap.
+    const payload: OrderBriefPayload = {
+      templateId,
+      brandName: brief.brandName.trim(),
+      tagline: brief.tagline.trim(),
+      description: brief.description.trim(),
+      themeColor: brief.themeColor,
+      ctaText: brief.ctaText.trim(),
+      toneOfVoice: brief.toneOfVoice.trim(),
+      merekLokasi: brief.brandName.trim(),
+      segmenTarget: brief.description.trim(),
+      suasanaMerek: brief.toneOfVoice.trim(),
+      aksiUtama: brief.ctaText.trim(),
+      nadaRekaman: brief.toneOfVoice.trim(),
+    };
+    // Order dicatat ke penyimpanan lokal (nomor UK-ORD-XXXX unik, status draft).
+    const created = createOrder({
+      templateId,
+      packageName: selected.name,
+      packageKey: selected.key,
+      quota: selected.quota,
+      price: selected.price,
+      contact: orderContact,
+      brief: payload,
+    });
+    // Pintasan "Lanjutkan pesanan terakhir" di halaman lacak.
+    setLastOrder({ number: created.order_number, id: created.id, status: created.status });
+    const whatsappUrl = contactChatUrl(
+      contactInfo,
+      created.order_number,
+      whatsappStageHint(created.status),
+    );
+    setOrder({
+      phase: 'done',
+      orderNumber: created.order_number,
+      orderId: created.id,
+      status: created.status,
+      whatsappUrl: whatsappUrl ?? '',
+    });
+    toast.success(
+      'Pesanan tercatat',
+      `Nomor ${created.order_number} masuk antrean editor. Konfirmasi berjalan di WhatsApp.`,
+    );
   }
 
-  // Tautan "Buka WhatsApp": pakai whatsappUrl dari respons; bila tidak ada,
-  // jatuh ke nomor resmi dari GET /api/contact dengan pesan berisi nomor order.
+  // Tautan "Buka WhatsApp": hasil susunan contactChatUrl berisi nomor order.
   const openWhatsappUrl = useMemo(() => {
     const done = order.phase === 'done' ? order : null;
-    const direct = (done?.whatsappUrl ?? '').trim();
-    if (direct) return direct;
-    if (!done || !contactInfo) return null;
-    return contactChatUrl(contactInfo, done.orderNumber, whatsappStageHint(done.status));
+    if (!done) return null;
+    const direct = done.whatsappUrl.trim();
+    return direct || contactChatUrl(contactInfo, done.orderNumber, whatsappStageHint(done.status));
   }, [order, contactInfo]);
 
-  const packages = pkgState.phase === 'ready' ? pkgState.packages : [];
-  const selectedPkg = packages.find((pkg) => pkg.key === pkgKey) ?? null;
+  const selectedPkg = PACKAGES.find((pkg) => pkg.key === pkgKey) ?? null;
 
-  if (templateError) {
+  if (!template) {
     return (
       <main id="konten" className="flex-1 bg-paper">
         <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
           <div role="alert" className="border border-danger bg-surface p-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">Gagal membuka</p>
             <p className="mt-2 text-lg font-semibold leading-snug">
-              Customizer tidak bisa dibuka: {templateError}
+              Customizer tidak bisa dibuka: template tidak ditemukan. Pilih ulang dari katalog.
             </p>
             <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
-              Penyebab paling umum: id contoh poster pada URL tidak ada lagi di katalog, atau
-              permintaan ke server gagal diproses.
+              Penyebab paling umum: id contoh poster pada URL tidak ada di katalog.
             </p>
             <Link
               href="/#katalog"
@@ -493,15 +422,11 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
               <span aria-hidden="true">&larr;</span> Kembali ke katalog
             </Link>
             <h1 className="mt-2 text-[30px] font-semibold leading-[1.02] tracking-tight sm:text-[42px]">
-              {template ? template.name : 'Memuat contoh poster'}
-              {template ? (
-                <span className="text-ink-soft">, lalu pesanannya dikirim lewat WhatsApp.</span>
-              ) : null}
+              {template.name}
+              <span className="text-ink-soft">, lalu pesanannya dikirim lewat WhatsApp.</span>
             </h1>
             <p className="mt-3 font-mono text-[11px] leading-relaxed text-ink-soft">
-              {template
-                ? `${categoryLabel(template.category)} / id ${template.id} / harga satuan ${formatRupiah(template.base_price)}`
-                : 'Mengambil detail contoh poster dari server'}
+              {`${categoryLabel(template.category)} / id ${template.id} / harga satuan ${formatRupiah(template.base_price)}`}
             </p>
           </div>
 
@@ -509,24 +434,13 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
               Paket terpilih
             </dt>
-            <dd className="font-mono text-[10px] text-ink">
-              {selectedPkg ? selectedPkg.name : pkgState.phase === 'error' ? 'belum tersedia' : 'memuat…'}
-            </dd>
+            <dd className="font-mono text-[10px] text-ink">{selectedPkg?.name ?? '—'}</dd>
             <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">Total bayar</dt>
             <dd className="font-mono text-[15px] text-ink">
               {selectedPkg ? formatRupiah(selectedPkg.price) : '—'}
             </dd>
           </dl>
         </div>
-
-        {catalogNote && (
-          <p
-            role="status"
-            className="mt-4 border border-warn bg-surface px-4 py-3 font-mono text-[11px] leading-relaxed text-warn"
-          >
-            {catalogNote}
-          </p>
-        )}
 
         <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-10">
           <div className="flex flex-col gap-8">
@@ -645,7 +559,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                       id="brief-color"
                       name="themeColor"
                       value={brief.themeColor}
-                      onChange={(e) => update('themeColor', e.target.value as ThemeColorKey)}
+                      onChange={(e) => update('themeColor', e.target.value as Brief['themeColor'])}
                       className={inputClass}
                     >
                       {THEME_OPTIONS.map((o) => (
@@ -736,78 +650,48 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                   berjalan di WhatsApp. Nomor pesanan tampil di layar setelah tombol ditekan.
                 </p>
 
-                {/* Kartu paket dari GET /api/packages: ETA + garansi tampil
-                    di sini, sebelum tombol bayar. */}
+                {/* Kartu paket statis: ETA + garansi tampil di sini, sebelum tombol bayar. */}
                 <fieldset className="flex flex-col gap-2">
                   <legend className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
                     Pilih paket
                   </legend>
 
-                  {pkgState.phase === 'loading' && (
-                    <div aria-busy="true" className="border border-rule bg-paper p-4">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                        Memuat daftar paket
-                      </p>
-                      <div className="mt-3 h-4 w-1/2 animate-pulse bg-rule" aria-hidden="true" />
-                    </div>
-                  )}
-
-                  {pkgState.phase === 'error' && (
-                    <div role="alert" className="border border-danger bg-paper p-4">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">
-                        Daftar paket tidak tersedia
-                      </p>
-                      <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
-                        {pkgState.message} Harga, estimasi, dan garansi tidak bisa dipastikan sampai
-                        server menjawab.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => void loadPackages()}
-                        className="mt-3 inline-flex min-h-11 items-center border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
+                  {PACKAGES.map((p) => {
+                    const active = pkgKey === p.key;
+                    const eta = packageEta(p);
+                    const guarantee = packageGuarantee(p);
+                    return (
+                      <label
+                        key={p.key}
+                        className={[
+                          'flex cursor-pointer items-start gap-3 border p-3.5 transition-colors',
+                          active ? 'border-ink bg-paper' : 'border-rule bg-surface hover:border-ink',
+                        ].join(' ')}
                       >
-                        Coba lagi
-                      </button>
-                    </div>
-                  )}
-
-                  {pkgState.phase === 'ready' &&
-                    packages.map((p) => {
-                      const active = pkgKey === p.key;
-                      const eta = packageEta(p);
-                      const guarantee = packageGuarantee(p);
-                      return (
-                        <label
-                          key={p.key}
-                          className={[
-                            'flex cursor-pointer items-start gap-3 border p-3.5 transition-colors',
-                            active ? 'border-ink bg-paper' : 'border-rule bg-surface hover:border-ink',
-                          ].join(' ')}
-                        >
-                          <input
-                            type="radio"
-                            name="package"
-                            value={p.key}
-                            checked={active}
-                            onChange={() => setPkgKey(p.key)}
-                            className="mt-1 size-4 accent-[var(--accent)]"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                              <span className="text-[13px] font-semibold">{p.name}</span>
-                              <span className="font-mono text-[13px]">{formatRupiah(p.price)}</span>
-                            </span>
-                            <span className="mt-1 block text-[12px] leading-relaxed text-ink-soft">
-                              {packageSummary(p)}
-                            </span>
-                            <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-ink-soft">
-                              <span>Estimasi: {eta || '—'}</span>
-                              <span>Garansi: {guarantee || '—'}</span>
-                            </span>
+                        <input
+                          type="radio"
+                          name="package"
+                          value={p.key}
+                          checked={active}
+                          onChange={() => setPkgKey(p.key)}
+                          className="mt-1 size-4 accent-[var(--accent)]"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                            <span className="text-[13px] font-semibold">{p.name}</span>
+                            <span className="font-mono text-[13px]">{formatRupiah(p.price)}</span>
                           </span>
-                        </label>
-                      );
-                    })}
+                          <span className="mt-1 block text-[12px] leading-relaxed text-ink-soft">
+                            {packageSummary(p)}
+                          </span>
+                          <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-ink-soft">
+                            <span>Estimasi: {eta || '—'}</span>
+                            <span>Garansi: {guarantee || '—'}</span>
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
                 </fieldset>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -874,7 +758,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                     <li>
                       {selectedPkg && packageEta(selectedPkg)
                         ? `Estimasi pengerjaan ${packageEta(selectedPkg)}.`
-                        : 'Estimasi pengerjaan ditampilkan setelah daftar paket dimuat.'}
+                        : 'Estimasi pengerjaan mengikuti paket yang dipilih.'}
                     </li>
                     <li>
                       {selectedPkg && packageGuarantee(selectedPkg)
@@ -896,29 +780,14 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
                 <button
                   type="submit"
-                  disabled={order.phase === 'loading' || !selectedPkg || !briefValid}
+                  disabled={!selectedPkg || !briefValid}
                   className="inline-flex min-h-12 w-full items-center justify-center gap-2 border border-ink bg-ink px-4 text-sm font-semibold text-paper transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--accent)] disabled:translate-y-0 disabled:border-rule disabled:bg-rule disabled:text-ink-soft disabled:shadow-none"
                 >
-                  {order.phase === 'loading' ? (
-                    <>
-                      <span
-                        className="size-3.5 animate-spin border-2 border-current border-t-transparent"
-                        aria-hidden="true"
-                      />
-                      <span>Mengirim pesanan</span>
-                    </>
-                  ) : (
-                    <span>Kirim Pesanan via WhatsApp</span>
-                  )}
+                  <span>Kirim Pesanan via WhatsApp</span>
                 </button>
                 {!briefValid && (
                   <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
                     Lengkapi brief pada Langkah 01 untuk mengaktifkan tombol kirim.
-                  </p>
-                )}
-                {briefValid && pkgState.phase !== 'ready' && (
-                  <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
-                    Tombol kirim aktif setelah daftar paket berhasil dimuat.
                   </p>
                 )}
               </div>
@@ -968,33 +837,13 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
               </div>
             )}
 
-            {order.phase === 'loading' && (
-              <div
-                className="min-h-[420px] animate-pulse border border-t-0 border-rule bg-paper p-6"
-                aria-busy="true"
-              >
-                <span className="sr-only">Server sedang mencatat pesanan Anda</span>
-                <div className="mx-auto flex w-full max-w-[420px] flex-col gap-3">
-                  <div className="h-3 w-40 bg-rule" aria-hidden="true" />
-                  <div className="h-14 w-full bg-rule" aria-hidden="true" />
-                  <div className="h-3 w-3/4 bg-rule" aria-hidden="true" />
-                  <div className="h-3 w-2/3 bg-rule" aria-hidden="true" />
-                  <div className="mt-4 h-11 w-full bg-rule" aria-hidden="true" />
-                  <div className="h-11 w-full bg-rule" aria-hidden="true" />
-                </div>
-                <p className="mt-6 font-mono text-[10px] text-ink-soft">
-                  Mencatat pesanan, lalu menyiapkan chat WhatsApp.
-                </p>
-              </div>
-            )}
-
             {order.phase === 'error' && (
               <div role="alert" className="border border-t-0 border-danger bg-paper p-6">
                 <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-danger">
                   Pesanan gagal dikirim
                 </p>
                 <p className="mt-3 max-w-sm text-[17px] font-semibold leading-snug">
-                  Server menolak pesanan ini.
+                  Pesanan ini belum bisa dicatat.
                 </p>
                 <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">
                   {order.message}

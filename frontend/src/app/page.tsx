@@ -179,7 +179,7 @@ export default function Home() {
         {/* Katalog contoh poster per segmen, dengan filter kategori. */}
         <TemplateCatalog />
 
-        {/* Harga: dua paket dari GET /api/packages, termasuk ETA + garansi. */}
+        {/* Harga: dua paket statis, termasuk ETA + garansi. */}
         <PackagesSection />
       </main>
       <Footer />

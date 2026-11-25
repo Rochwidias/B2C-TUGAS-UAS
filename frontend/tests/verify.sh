@@ -1,136 +1,103 @@
 #!/usr/bin/env bash
-# Verifikasi menyeluruh Aether Creative dalam satu perintah (alur WhatsApp,
-# tanpa AI — kontrak docs/WHATSAPP-FLOW.md).
+# Verifikasi suite uji Aether Creative dalam satu perintah — FRONTEND-ONLY.
 #
 #   cd frontend && bash tests/verify.sh
 #
-# Alasan skrip ini ada: uji keamanan sengaja menabrakkan rate limit, jadi
-# penghitung per-IP harus dimulai dari nol. Menjalankan suite berurutan pada
-# server yang sudah lama hidup akan menghasilkan 429 palsu yang menyesatkan.
-# Karena itu setiap suite mendapat server baru di port sendiri.
+# Mengapa hanya test_e2e.py + test_features.py?
+#   test_api.py dan test_security.py DIHAPUS: subjeknya endpoint backend
+#   (/api/templates, rate limit, login server, validasi request) yang sudah
+#   tidak ada sejak backend dihapus total 2026-11-25 — kontrak berlaku
+#   docs/FRONTEND-ONLY.md (frontend-only, data di localStorage, tanpa API).
 #
-# Exit 0 hanya bila SEMUA suite lolos.
+# Mengapa tanpa restart-per-suite?
+#   Alasan lama (penghitung rate limit in-memory backend harus bersih per
+#   suite) hilang bersama backendnya. Kini satu server Next cukup untuk semua
+#   suite, tanpa restart dan tanpa backend.
+#
+# Skrip menyalakan sendiri server Next di depan (next start bila build sudah
+# ada, next dev bila belum) dan mematikannya lagi lewat trap. Exit 0 hanya
+# bila SEMUA suite lolos.
+#
+# Env yang bisa di-override:
+#   PORT   port server Next   (default 3720)
+#   PW_PY  interpreter Python dengan playwright + pytest (default python3)
+#   BASE_URL  base URL uji    (default http://localhost:$PORT)
+#   SHOT_DIR folder screenshot (default: folder sementara sistem)
 
 set -u
 
-FRONTEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$FRONTEND_DIR" || exit 1
-
-PORT_BASE="${PORT_BASE:-3710}"
-PY="${PY:-python3}"
-# Interpreter yang benar-benar punya playwright (venv lama sudah dihapus).
-PW_PY="${PW_PY:-D:/Applications/Python312/python.exe}"
-SHOTS="${SHOT_DIR:-D:/hermes/cache/scratch/shots-verify}"
-# Backend Express tempat rate limit in-memory disimpan — wajib di-restart tiap
-# suite supaya penghitungnya mulai dari nol.
-BACKEND_DIR="$(cd "$FRONTEND_DIR/../backend" && pwd)"
-BACKEND_PORT="${BACKEND_PORT:-4000}"
+TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRONTEND_DIR="$(cd "$TESTS_DIR/.." && pwd)"
+PORT="${PORT:-3720}"
+PW_PY="${PW_PY:-python3}"
+BASE_URL="${BASE_URL:-http://localhost:$PORT}"
+SHOTS="${SHOT_DIR:-$(mktemp -d)/aether-shots}"
+SERVER_LOG="$SHOTS/server.log"
+SERVER_PID=""
 FAILED=0
 
-log() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
-
-kill_port() {
-  for pid in $(netstat -ano 2>/dev/null | grep LISTENING | grep ":$1 " | awk '{print $NF}' | sort -u); do
-    MSYS_NO_PATHCONV=1 taskkill /PID "$pid" /F >/dev/null 2>&1
-  done
+# Matikan server apa pun yang terjadi. `next dev`/`next start` menjalankan
+# proses anak yang tetap memegang port, jadi selain mematikan PID npx kita
+# juga mematikan siapa pun yang mendengarkan di PORT (lsof/fuser).
+kill_port_listeners() {
+  if command -v lsof >/dev/null 2>&1; then
+    for pid in $(lsof -ti tcp:"$1" 2>/dev/null); do kill "$pid" 2>/dev/null; done
+  fi
+  command -v fuser >/dev/null 2>&1 && fuser -k "$1/tcp" >/dev/null 2>&1
 }
 
-# Apakah port masih didengarkan proses (cocok persis pada akhir local address).
-port_busy() {
-  netstat -ano 2>/dev/null | awk -v p=":$1" '$4=="LISTENING" && $2 ~ p"$" {f=1} END {exit(f ? 0 : 1)}'
+cleanup() {
+  if [ -n "$SERVER_PID" ]; then
+    command -v pkill >/dev/null 2>&1 && pkill -P "$SERVER_PID" >/dev/null 2>&1
+    kill "$SERVER_PID" >/dev/null 2>&1
+    wait "$SERVER_PID" 2>/dev/null
+  fi
+  kill_port_listeners "$PORT"
+}
+trap cleanup EXIT INT TERM
+
+# Cek kesiapan server; pakai curl bila ada, kalau tidak python urllib.
+probe() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS -o /dev/null --max-time 3 "$1"
+  else
+    "$PW_PY" -c "import sys,urllib.request; urllib.request.urlopen(sys.argv[1], timeout=3)" "$1"
+  fi
 }
 
 wait_ready() {
-  for _ in $(seq 1 60); do
-    if curl -fsS "http://localhost:$1/api/templates" >/dev/null 2>&1; then return 0; fi
+  for _ in $(seq 1 120); do
+    if probe "http://localhost:$1/"; then return 0; fi
     sleep 1
   done
   return 1
 }
 
-# Matikan backend lama di :4000 lalu nyalakan ulang dari dist/ — counter rate
-# limit in-memory kembali bersih. Backend sengaja dibiarkan hidup setelah skrip
-# selesai agar langsung bisa dipakai.
-backend_restart() {
-  for _ in $(seq 1 15); do
-    if ! port_busy "$BACKEND_PORT"; then break; fi
-    kill_port "$BACKEND_PORT"
-    sleep 1
-  done
-  if [ -f "$BACKEND_DIR/dist/index.js" ]; then
-    (cd "$BACKEND_DIR" && node dist/index.js) >/tmp/craftai-backend.log 2>&1 &
-  else
-    (cd "$BACKEND_DIR" && npm start) >/tmp/craftai-backend.log 2>&1 &
-  fi
-  if wait_ready "$BACKEND_PORT"; then
-    printf 'backend :%s siap — rate limit bersih\n' "$BACKEND_PORT"
-    return 0
-  fi
-  echo "Backend gagal siap di :$BACKEND_PORT — lihat /tmp/craftai-backend.log"
-  FAILED=1
-  return 1
-}
+cd "$FRONTEND_DIR" || exit 1
+mkdir -p "$SHOTS"
 
-# --- 1. typecheck, lint, build -------------------------------------------------
-log "typecheck"
-npx tsc --noEmit || FAILED=1
-
-log "lint"
-npx eslint src || FAILED=1
-
-log "build"
-npm run build || FAILED=1
-
-# --- 2. API + keamanan (server baru: penghitung rate limit bersih) -------------
-# Backend Express juga di-restart: rate limit in-memory di :4000 ikut terbakar
-# saat suite keamanan, jadi tiap suite butuh penghitung yang bersih.
-log "build backend"
-(cd "$BACKEND_DIR" && npx tsc) || FAILED=1
-
-PORT=$PORT_BASE
-kill_port "$PORT"
-backend_restart
-npx next start -p "$PORT" >/tmp/craftai-api.log 2>&1 &
-if wait_ready "$PORT"; then
-  log "api contract (server :$PORT)"
-  BASE_URL="http://localhost:$PORT" "$PY" tests/test_api.py || FAILED=1
-
-  # Restart sebelum suite keamanan: dia menabrakkan rate limit dengan sengaja.
-  kill_port "$PORT"
-  backend_restart
-  npx next start -p "$PORT" >/tmp/craftai-sec.log 2>&1 &
-  wait_ready "$PORT" || FAILED=1
-
-  log "keamanan & validasi (server baru :$PORT)"
-  BASE_URL="http://localhost:$PORT" "$PY" tests/test_security.py || FAILED=1
+echo "== Menyalakan server Next di :$PORT =="
+if [ -f .next/BUILD_ID ]; then
+  npx next start -p "$PORT" >"$SERVER_LOG" 2>&1 &
 else
-  echo "Server gagal siap di :$PORT"; FAILED=1
+  npx next dev -p "$PORT" >"$SERVER_LOG" 2>&1 &
 fi
-kill_port "$PORT"
+SERVER_PID=$!
 
-# --- 3. E2E + fitur UI (server baru lagi) --------------------------------------
-PORT=$((PORT_BASE + 1))
-kill_port "$PORT"
-# Suite keamanan membakar rate limit -> backend harus bersih sebelum E2E login.
-backend_restart
-npx next start -p "$PORT" >/tmp/craftai-e2e.log 2>&1 &
-if wait_ready "$PORT"; then
-  mkdir -p "$SHOTS"
-  log "e2e alur utama (server :$PORT)"
-  BASE_URL="http://localhost:$PORT" SHOT_DIR="$SHOTS" "$PW_PY" tests/test_e2e.py || FAILED=1
-
-  log "fitur UX baru (server :$PORT)"
-  BASE_URL="http://localhost:$PORT" "$PW_PY" tests/test_features.py || FAILED=1
-else
-  echo "Server gagal siap di :$PORT"; FAILED=1
+if ! wait_ready "$PORT"; then
+  echo "Server gagal siap di :$PORT — lihat log: $SERVER_LOG"
+  exit 1
 fi
-kill_port "$PORT"
+echo "Server siap: $BASE_URL"
+
+echo
+echo "== e2e alur utama + fitur UI (tanpa backend) =="
+"$PW_PY" -m pytest -q "$TESTS_DIR/test_e2e.py" "$TESTS_DIR/test_features.py" || FAILED=1
 
 echo
 if [ "$FAILED" -eq 0 ]; then
   echo "SEMUA SUITE LOLOS"
-  echo "Bukti screenshot: $SHOTS"
 else
-  echo "ADA SUITE GAGAL — lihat log di atas"
+  echo "ADA SUITE GAGAL — log server: $SERVER_LOG"
 fi
 exit "$FAILED"

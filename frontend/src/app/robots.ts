@@ -8,8 +8,9 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        // Back-office dan API tidak boleh masuk indeks mesin pencari.
-        disallow: ['/admin', '/admin/', '/api/', '/orders/'],
+        // Back-office tidak boleh masuk indeks mesin pencari; rute /api sudah
+        // tidak ada (frontend-only, docs/FRONTEND-ONLY.md).
+        disallow: ['/admin', '/admin/', '/orders/'],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

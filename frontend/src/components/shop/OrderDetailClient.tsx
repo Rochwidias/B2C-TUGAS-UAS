@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { CopyButton } from '@/components/shop/CopyButton';
 import { DraftPreview } from '@/components/shop/DraftPreview';
@@ -16,40 +16,28 @@ import {
   type Brief,
   type Draft,
   type Order,
-  type OrderResponse,
-  type PackageOption,
+  type OrderBriefPayload,
   type ThemeColorKey,
   formatRupiah,
   packageEta,
   packageGuarantee,
-  packageSummary,
   statusLabel,
 } from '@/components/shop/types';
-import { fetchCatalog } from '@/lib/catalog';
-import { fetchPackages, packageForOrder } from '@/lib/packages';
-
-function safeGetItem(key: string): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
+import { CATALOG_TEMPLATES } from '@/lib/catalog';
+import { PACKAGES, packageForOrder } from '@/lib/packages';
+import {
+  RECENT_EVENT,
+  addBriefPoster,
+  addRevisionNote,
+  getOrderById,
+  remainingOf,
+  type StoredOrder,
+} from '@/lib/orders-store';
 
 type LoadState =
   | { phase: 'loading' }
   | { phase: 'error'; message: string }
-  | { phase: 'ready'; data: OrderResponse; templateName: string | null };
-
-type PackagesState =
-  | { phase: 'loading' }
-  | { phase: 'ready'; packages: PackageOption[] }
-  | { phase: 'error'; message: string };
-
-// Jeda polling disengaja 15 detik: endpoint track dibatasi 20 permintaan per
-// menit, jadi polling agresif akan cepat kena 429.
-const POLL_MS = 15_000;
+  | { phase: 'ready'; order: StoredOrder };
 
 // Status yang mengizinkan permintaan revisi (docs/REDESIGN.md §5).
 const REVISABLE: Order['status'][] = ['paid', 'in_progress', 'review'];
@@ -66,16 +54,6 @@ function formatDuration(ms: number): string {
   if (hours > 0) parts.push(`${hours} jam`);
   if (days === 0 && minutes > 0) parts.push(`${minutes} menit`);
   return parts.join(' ') || 'baru saja';
-}
-
-/** Susun OrderResponse ringkas dari order lokal (tanpa backend). */
-function orderToResponse(order: Order): OrderResponse {
-  return {
-    order,
-    draft: null,
-    logs: [],
-    remaining: order.quota ?? undefined,
-  };
 }
 
 // Estimasi berjalan memakai selisih created_at → updated_at (durasi nyata
@@ -108,6 +86,10 @@ function fmtTime(ts: string | null | undefined): string {
   });
 }
 
+function templateNameOf(order: StoredOrder): string | null {
+  return CATALOG_TEMPLATES.find((t) => t.id === order.template_id)?.name ?? null;
+}
+
 /** useParams tidak boleh dipanggil saat prerender di luar Suspense
  *  (CLIENT_HOOK_DYNAMIC), jadi isinya dibungkus di sini. */
 export function OrderDetailClient() {
@@ -137,80 +119,51 @@ function OrderDetailInner() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
-  const [pkgState, setPkgState] = useState<PackagesState>({ phase: 'loading' });
-  const toast = useToast();
 
-  // Ref data terakhir: dipakai polling untuk membandingkan status/updatedAt
-  // sebelum memutuskan apakah perlu toast.
-  const dataRef = useRef<OrderResponse | null>(null);
-  const templateNameRef = useRef<string | null>(null);
-  const aliveRef = useRef(true);
-
-  const applyData = (next: OrderResponse, templateName: string | null) => {
-    dataRef.current = next;
-    if (templateName !== null) templateNameRef.current = templateName;
-    setState({ phase: 'ready', data: next, templateName: templateNameRef.current });
-  };
-
-  // Pembaruan diam-diam untuk polling dan aksi (revisi/brief): hanya menampilkan
-  // toast bila status atau updated_at benar-benar berubah.
-  const refresh = useCallback(
-    async (silent = false) => {
-      try {
-        // Muat ulang order dari penyimpanan lokal (frontend-only, tanpa backend).
-        const raw = safeGetItem('aether-orders');
-        const orders: Order[] = raw ? JSON.parse(raw) : [];
-        const order = Array.isArray(orders) ? orders.find((o) => o.id === orderId) : null;
-        if (!order || !aliveRef.current) return;
-        const templates = await fetchCatalog();
-        const templateName = templates.find((t) => t.id === order.template_id)?.name ?? null;
-        applyData(orderToResponse(order), templateName);
-      } catch {
-        // Polling gagal: biarkan data terakhir tampil.
-      }
-    },
-    [orderId, toast],
-  );
-
-  // Polling progres ±15 detik, dijeda saat tab tersembunyi supaya tidak
-  // membuang jatah rate limit track.
-  // Pemuatan awal memakai rantai promise supaya tidak ada setState sinkron di
-  // dalam effect (react-hooks/set-state-in-effect); polling dan aksi memakai
-  // refresh() dari callback event.
+  // Muat awal: order dibaca dari store lokal (frontend-only, tanpa backend).
+  // Pembacaan dibungkus microtask supaya tidak ada setState sinkron di effect.
   useEffect(() => {
-    aliveRef.current = true;
-    (async () => {
-      try {
-        const [templates, pkgResult] = await Promise.all([fetchCatalog(), fetchPackages()]);
-        const raw = safeGetItem('aether-orders');
-        const orders: Order[] = raw ? JSON.parse(raw) : [];
-        const order = Array.isArray(orders) ? orders.find((o) => o.id === orderId) : null;
-        if (!aliveRef.current) return;
-        if (pkgResult.ok) setPkgState({ phase: 'ready', packages: pkgResult.packages });
-        else setPkgState({ phase: 'error', message: pkgResult.error ?? 'Daftar paket tidak bisa dimuat.' });
-        if (!order) {
-          setState({ phase: 'error', message: `Pesanan ${orderId} tidak ditemukan.` });
-          return;
-        }
-        const templateName = templates.find((t) => t.id === order.template_id)?.name ?? null;
-        applyData(orderToResponse(order), templateName);
-      } catch {
-        if (!aliveRef.current) return;
-        setState({ phase: 'error', message: 'Tidak bisa memuat pesanan.' });
+    let alive = true;
+    Promise.resolve().then(() => {
+      if (!alive) return;
+      const order = getOrderById(orderId);
+      if (!alive) return;
+      if (!order) {
+        setState({ phase: 'error', message: `Pesanan ${orderId} tidak ditemukan.` });
+        return;
       }
-    })();
+      setState({ phase: 'ready', order });
+    });
     return () => {
-      aliveRef.current = false;
+      alive = false;
     };
   }, [orderId]);
 
+  // Pembaruan langsung saat store berubah (mis. editor mengubah status di tab
+  // admin pada browser yang sama): didengarkan lewat RECENT_EVENT + `storage`.
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      void refresh();
-    }, POLL_MS);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    const onChange = () => {
+      const order = getOrderById(orderId);
+      if (!order) return;
+      setState((prev) => {
+        if (
+          prev.phase === 'ready' &&
+          prev.order.status === order.status &&
+          prev.order.updated_at === order.updated_at &&
+          prev.order.drafts.length === order.drafts.length
+        ) {
+          return prev;
+        }
+        return { phase: 'ready', order };
+      });
+    };
+    window.addEventListener(RECENT_EVENT, onChange);
+    window.addEventListener('storage', onChange);
+    return () => {
+      window.removeEventListener(RECENT_EVENT, onChange);
+      window.removeEventListener('storage', onChange);
+    };
+  }, [orderId]);
 
   // URL halaman ini dibaca setelah mount agar cocok dengan URL browser
   // (hindari hydration mismatch karena URL server bisa berbeda).
@@ -276,23 +229,19 @@ function OrderDetailInner() {
     );
   }
 
-  const { order, logs } = state.data;
+  const { order } = state;
+  const logs = order.logs;
   const completed = order.status === 'completed';
   const quota = order.quota ?? null;
-  const draftRows = collectDrafts(state.data);
-  const remaining =
-    typeof state.data.remaining === 'number'
-      ? state.data.remaining
-      : quota !== null
-        ? Math.max(quota - draftRows.length, 0)
-        : null;
-  const previewContent: Draft | null =
-    state.data.draft?.ai_generated_content ?? draftRows.find((row) => row.content)?.content ?? null;
+  const draftRows = collectDrafts(order);
+  const remaining = remainingOf(order);
+  const previewContent: Draft | null = draftRows.find((row) => row.content)?.content ?? null;
   const canOpenLive = Boolean(completed && order.live_website_url);
   const canDownload = Boolean(completed && order.download_zip_url);
   const canExport = Boolean(completed && previewContent);
   const elapsed = elapsedLabel(order.created_at, order.updated_at);
-  const pkg = pkgState.phase === 'ready' ? packageForOrder(pkgState.packages, order) : null;
+  const templateName = templateNameOf(order);
+  const pkg = packageForOrder(PACKAGES, order);
 
   return (
     <>
@@ -312,7 +261,7 @@ function OrderDetailInner() {
                 Poster untuk {order.contact_name}
               </h1>
               <p className="mt-3 font-mono text-[11px] leading-relaxed text-ink-soft">
-                {state.templateName ? `Contoh ${state.templateName} / ` : ''}
+                {templateName ? `Contoh ${templateName} / ` : ''}
                 Paket {order.package_name} / {formatRupiah(order.total_price)} / pembayaran{' '}
                 {order.payment_status === 'paid' ? 'lunas' : 'belum lunas'}
                 {quota !== null ? ` / kuota ${quota} poster` : ''}
@@ -342,7 +291,7 @@ function OrderDetailInner() {
               className="flex shrink-0 items-center gap-2 border border-rule bg-surface px-4 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft"
             >
               <span aria-hidden="true" className="size-1.5 animate-pulse bg-ok motion-reduce:animate-none" />
-              Notifikasi progres aktif / tiap 15 detik
+              Pembaruan langsung dari penyimpanan lokal
             </p>
           </div>
 
@@ -368,44 +317,7 @@ function OrderDetailInner() {
               </span>
             </div>
 
-            {pkgState.phase === 'loading' && (
-              <div aria-busy="true" className="border border-rule bg-surface p-4">
-                <div className="h-4 w-40 animate-pulse bg-rule" aria-hidden="true" />
-                <div className="mt-3 h-3 w-2/3 animate-pulse bg-rule" aria-hidden="true" />
-              </div>
-            )}
-
-            {pkgState.phase === 'error' && (
-              <div role="alert" className="border border-danger bg-surface p-4">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">
-                  Rincian paket belum bisa dimuat
-                </p>
-                <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">
-                  {pkgState.message} Pesanan Anda tetap tercatat dengan paket{' '}
-                  <span className="font-mono text-ink">{order.package_name}</span>.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPkgState({ phase: 'loading' });
-                    void fetchPackages().then((result) => {
-                      if (!aliveRef.current) return;
-                      if (result.ok) setPkgState({ phase: 'ready', packages: result.packages });
-                      else
-                        setPkgState({
-                          phase: 'error',
-                          message: result.error ?? 'Daftar paket tidak bisa dimuat.',
-                        });
-                    });
-                  }}
-                  className="mt-3 inline-flex min-h-11 items-center border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
-                >
-                  Coba lagi
-                </button>
-              </div>
-            )}
-
-            {pkgState.phase === 'ready' && pkg && (
+            {pkg ? (
               <dl className="grid grid-cols-1 gap-px border border-rule bg-rule sm:grid-cols-4">
                 <div className="bg-surface p-4">
                   <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
@@ -432,19 +344,14 @@ function OrderDetailInner() {
                     Kuota
                   </dt>
                   <dd className="mt-1.5 font-mono text-[13px]">
-                    {typeof remaining === 'number'
-                      ? `sisa ${remaining} / ${quota ?? pkg.quota}`
-                      : packageSummary(pkg)}
+                    {`sisa ${remaining} / ${quota ?? pkg.quota}`}
                   </dd>
                 </div>
               </dl>
-            )}
-
-            {pkgState.phase === 'ready' && !pkg && (
+            ) : (
               <p className="border border-rule bg-surface px-4 py-3 text-[13px] leading-relaxed text-ink-soft">
-                Paket <span className="font-mono text-ink">{order.package_name}</span> belum cocok
-                dengan daftar paket di server, jadi estimasi dan garansinya tidak bisa ditampilkan
-                sekarang.
+                Paket <span className="font-mono text-ink">{order.package_name}</span> tidak ada
+                dalam daftar paket, jadi estimasi dan garansinya tidak bisa ditampilkan sekarang.
               </p>
             )}
           </section>
@@ -456,7 +363,7 @@ function OrderDetailInner() {
                 Draft poster dalam kuota
               </h2>
               <span className="font-mono text-[10px] text-ink-soft">
-                {typeof remaining === 'number' ? `sisa ${remaining} brief` : `${draftRows.length} draft`}
+                {draftRows.length > 0 ? `sisa ${remaining} brief` : `${draftRows.length} draft`}
               </span>
             </div>
 
@@ -464,7 +371,7 @@ function OrderDetailInner() {
               <EmptyState
                 icon="—"
                 title="Belum ada draft terlampir"
-                description="Poster disusun editor dari brief pertama yang Anda kirim. Bila pesanan ini dibuat sebelum fitur poster aktif, tidak ada pratinjau yang bisa ditampilkan."
+                description="Poster disusun editor dari brief pertama yang Anda kirim. Bila pesanan ini belum dikerjakan, tidak ada pratinjau yang bisa ditampilkan."
               />
             ) : (
               <ol className="flex flex-col divide-y divide-rule border-t border-rule">
@@ -494,17 +401,13 @@ function OrderDetailInner() {
             <div className="grid gap-6 lg:grid-cols-2">
               <RevisionForm
                 orderId={order.id}
-                orderNumber={order.order_number}
                 allowed={REVISABLE.includes(order.status)}
                 statusLabelCurrent={statusLabel(order.status)}
-                onDone={() => void refresh(true)}
               />
               <BriefForm
                 orderId={order.id}
-                orderNumber={order.order_number}
                 templateId={order.template_id}
                 remaining={remaining}
-                onDone={() => void refresh(true)}
               />
             </div>
           </section>
@@ -556,8 +459,8 @@ function OrderDetailInner() {
                 </a>
                 <a
                   href={
-                    // Frontend-only: tidak ada endpoint export backend. Link
-                    // tetap dirender tapi tidak mengarah ke berkas nyata.
+                    // Frontend-only: tidak ada endpoint export. Link tetap
+                    // dirender tapi tidak mengarah ke berkas nyata.
                     undefined
                   }
                   aria-disabled={!canExport}
@@ -616,7 +519,7 @@ function OrderDetailInner() {
                   Pratinjau draft poster
                 </h2>
                 <span className="font-mono text-[10px] text-ink-soft">
-                  id {state.data.draft?.id ?? draftRows[0]?.id}
+                  id {draftRows[0]?.id}
                 </span>
               </div>
               <DraftPreview draft={previewContent} />
@@ -629,7 +532,7 @@ function OrderDetailInner() {
               <EmptyState
                 icon="—"
                 title="Draft belum terlampir pada pesanan ini"
-                description="Poster disusun editor dari brief Anda. Bila pesanan ini dibuat sebelum fitur poster aktif, tidak ada pratinjau yang bisa ditampilkan. Hubungi editor lewat WhatsApp bila Anda butuh salinan brief."
+                description="Poster disusun editor dari brief Anda. Bila pesanan ini belum dikerjakan, tidak ada pratinjau yang bisa ditampilkan. Hubungi editor lewat WhatsApp bila Anda butuh salinan brief."
               />
             </section>
           )}
@@ -640,51 +543,35 @@ function OrderDetailInner() {
   );
 }
 
-/** Satu baris draft untuk daftar kuota: memakai `drafts` bila tersedia, dengan
- *  fallback ke `draft` tunggal pada response lama. */
-function collectDrafts(data: OrderResponse): {
+/** Satu baris draft milik order (dari store lokal). */
+function collectDrafts(order: StoredOrder): {
   id: string;
   generatedAt: string | null;
   brief: Brief | null;
   content: Draft | null;
 }[] {
-  const rows: { id: string; generatedAt: string | null; brief: Brief | null; content: Draft | null }[] = [];
-  (data.drafts ?? []).forEach((item) => {
-    rows.push({
-      id: item.id,
-      generatedAt: item.generated_at ?? null,
-      brief: (item.input_prompt_data as Brief | null) ?? null,
-      content: item.ai_generated_content ?? null,
-    });
-  });
-  if (data.draft && !rows.some((row) => row.id === data.draft!.id)) {
-    rows.push({
-      id: data.draft.id,
-      generatedAt: null,
-      brief: null,
-      content: data.draft.ai_generated_content ?? null,
-    });
-  }
-  return rows;
+  return order.drafts.map((item) => ({
+    id: item.id,
+    generatedAt: item.generated_at ?? null,
+    brief: (item.input_prompt_data as Brief | null) ?? null,
+    content: item.ai_generated_content ?? null,
+  }));
 }
 
 const fieldClass =
   'w-full min-h-11 border border-rule bg-paper px-3 py-2 text-sm text-ink transition-colors placeholder:text-ink-soft/70 focus:border-ink focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const labelClass = 'mb-1.5 block font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft';
 
-/** Form "Minta Revisi": POST /api/orders/[id]/revision (docs/REDESIGN.md §5). */
+/** Form "Minta Revisi": catatan disimpan lewat addRevisionNote() di store —
+ *  status tidak berubah, log baru berprefix [REVISI] masuk ke timeline. */
 function RevisionForm({
   orderId,
-  orderNumber,
   allowed,
   statusLabelCurrent,
-  onDone,
 }: {
   orderId: string;
-  orderNumber: string;
   allowed: boolean;
   statusLabelCurrent: string;
-  onDone: () => void;
 }) {
   const [message, setMessage] = useState('');
   const [state, setState] = useState<{ phase: 'idle' | 'loading' | 'error'; message: string }>({
@@ -693,7 +580,7 @@ function RevisionForm({
   });
   const toast = useToast();
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     const text = message.trim();
     if (text.length < 10) {
@@ -701,24 +588,18 @@ function RevisionForm({
       return;
     }
     setState({ phase: 'loading', message: '' });
-    try {
-      // Frontend-only: catatan revisi disimpan ke order lokal di penyimpanan
-      // lokal (tidak ada backend), status tidak berubah.
-      const raw = safeGetItem('aether-orders');
-      const orders: Order[] = raw ? JSON.parse(raw) : [];
-      const idx = Array.isArray(orders) ? orders.findIndex((o) => o.id === orderId) : -1;
-      if (idx === -1) throw new Error('Order tidak ditemukan');
-      orders[idx] = { ...orders[idx], updated_at: new Date().toISOString() };
-      localStorage.setItem('aether-orders', JSON.stringify(orders));
-      window.dispatchEvent(new Event('craftai:recent-changed'));
-      setMessage('');
-      setState({ phase: 'idle', message: '' });
-      toast.success('Catatan revisi tersimpan', 'Catatan muncul di timeline pesanan ini.');
-      onDone();
-    } catch {
-      setState({ phase: 'error', message: 'Gagal menyimpan catatan revisi.' });
+    const updated = addRevisionNote(orderId, text);
+    if (!updated) {
+      setState({
+        phase: 'error',
+        message: 'Pesanan tidak ditemukan di penyimpanan lokal, atau catatan gagal tersimpan.',
+      });
       toast.error('Revisi gagal tersimpan', 'Coba beberapa saat lagi.');
+      return;
     }
+    setMessage('');
+    setState({ phase: 'idle', message: '' });
+    toast.success('Catatan revisi tersimpan', 'Catatan muncul di timeline pesanan ini.');
   }
 
   return (
@@ -774,20 +655,16 @@ function RevisionForm({
   );
 }
 
-/** Form "Tambah brief poster": POST /api/orders/[id]/briefs, hanya bila
+/** Form "Tambah brief poster": lewat addBriefPoster() di store, hanya bila
  *  sisa kuota > 0 (docs/REDESIGN.md §5). */
 function BriefForm({
   orderId,
-  orderNumber,
   templateId,
   remaining,
-  onDone,
 }: {
   orderId: string;
-  orderNumber: string;
   templateId: string;
   remaining: number | null;
-  onDone: () => void;
 }) {
   const [brief, setBrief] = useState<Brief>({
     templateId,
@@ -806,7 +683,7 @@ function BriefForm({
 
   const quotaLeft = remaining !== null && remaining > 0;
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!quotaLeft) return;
     const trimmed = { ...brief, description: brief.description.trim(), brandName: brief.brandName.trim() };
@@ -818,30 +695,35 @@ function BriefForm({
       return;
     }
     setState({ phase: 'loading', message: '' });
-    try {
-      // Frontend-only: brief disimpan ke order lokal di penyimpanan lokal
-      // (tidak ada backend), sisa kuota dikurangi satu.
-      const raw = safeGetItem('aether-orders');
-      const orders: Order[] = raw ? JSON.parse(raw) : [];
-      const idx = Array.isArray(orders) ? orders.findIndex((o) => o.id === orderId) : -1;
-      if (idx === -1) throw new Error('Order tidak ditemukan');
-      const remaining = orders[idx].quota ?? 0;
-      if (remaining <= 0) throw new Error('Sisa kuota habis');
-      orders[idx] = {
-        ...orders[idx],
-        quota: remaining - 1,
-        updated_at: new Date().toISOString(),
-      };
-      localStorage.setItem('aether-orders', JSON.stringify(orders));
-      window.dispatchEvent(new Event('craftai:recent-changed'));
-      setBrief((prev) => ({ ...prev, brandName: '', tagline: '', description: '', ctaText: '' }));
-      setState({ phase: 'idle', message: '' });
-      toast.success('Brief poster tambahan terkirim', 'Draft baru dibuat dalam kuota paket.');
-      onDone();
-    } catch {
-      setState({ phase: 'error', message: 'Jaringan terputus. Coba beberapa saat lagi.' });
-      toast.error('Tidak bisa terhubung', 'Periksa koneksi Anda lalu coba lagi.');
+    // Susun OrderBriefPayload: medan kontrak diisi dari isian form yang tersedia.
+    const payload: OrderBriefPayload = {
+      ...trimmed,
+      merekLokasi: trimmed.brandName,
+      segmenTarget: trimmed.description,
+      suasanaMerek: trimmed.toneOfVoice,
+      aksiUtama: trimmed.ctaText,
+      nadaRekaman: trimmed.toneOfVoice,
+    };
+    const result = addBriefPoster(orderId, payload);
+    if (!result.ok) {
+      if (result.reason === 'quota') {
+        setState({
+          phase: 'error',
+          message: 'Kuota poster paket ini sudah habis. Pilih paket baru bila ingin menambah poster.',
+        });
+        toast.error('Kuota habis', 'Semua slot poster paket ini sudah terpakai.');
+      } else {
+        setState({
+          phase: 'error',
+          message: 'Pesanan tidak ditemukan di penyimpanan lokal perangkat ini.',
+        });
+        toast.error('Pesanan tidak ditemukan', 'Periksa ulang tautan atau nomor pesanannya.');
+      }
+      return;
     }
+    setBrief((prev) => ({ ...prev, brandName: '', tagline: '', description: '', ctaText: '' }));
+    setState({ phase: 'idle', message: '' });
+    toast.success('Brief poster tambahan terkirim', 'Draft baru dibuat dalam kuota paket.');
   }
 
   return (

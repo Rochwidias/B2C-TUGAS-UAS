@@ -4,19 +4,21 @@
 // mengekspor metadata (halaman 'use client' tidak boleh).
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ThemeToggle } from '@/components/shop/ThemeToggle';
-import { Spinner } from '@/components/ui/Feedback';
-import { API_BASE } from '@/lib/api';
 
-/** Ambil sisa detik dari pesan 429 server ("Coba lagi dalam 42 detik."). */
-function parseRetrySeconds(message: string): number | null {
-  const match = /(\d+)\s*detik/i.exec(message);
-  if (!match) return null;
-  const value = Number.parseInt(match[1] ?? '', 10);
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
+// Login lokal tanpa backend (docs/FRONTEND-ONLY.md §4): password dicocokkan
+// dengan env NEXT_PUBLIC_ADMIN_PASSWORD, lalu cookie sesi diterbitkan langsung
+// dari browser. Gate ini tingkat demo — password ikut bundle client.
+const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? 'admin123';
+
+// Nama cookie dibangun dari dua bagian supaya tidak tertukar dengan placeholder
+// saat file ditulis ulang oleh alat — harus persis 'admin_session' agar
+// middleware mengenalinya.
+const ADMIN_PART = 'admin';
+const SESSION_PART = 'session';
+const ADMIN_SESSION_COOKIE = `${ADMIN_PART}_${SESSION_PART}`;
 
 /** Hanya path internal yang boleh jadi tujuan redirect setelah login. */
 function safeFrom(value: string | null): string {
@@ -28,71 +30,54 @@ function safeFrom(value: string | null): string {
 
 function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const from = safeFrom(searchParams.get('from'));
+  // Param ?from= dibaca dari window.location di effect — sengaja BUKAN lewat
+  // useSearchParams — supaya formulir tercetak penuh di HTML statis tanpa
+  // fallback Suspense: field password tampil sejak domcontentloaded, bukan
+  // baru setelah hidrasi (dulu menyebabkan race di uji gate dan login).
+  const [from, setFrom] = useState('/admin');
+
+  // Pembacaan dibungkus microtask supaya tidak ada setState sinkron di effect
+  // (react-hooks/set-state-in-effect) — pola yang sama dengan pemulihan brief
+  // di CustomizerClient.
+  useEffect(() => {
+    let alive = true;
+    Promise.resolve().then(() => {
+      if (!alive) return;
+      const value = new URLSearchParams(window.location.search).get('from');
+      setFrom(safeFrom(value));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Hitung mundur sisa waktu setelah 429 supaya admin tahu kapan boleh mencoba
-  // lagi tanpa menebak-nebak.
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = setTimeout(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
-    return () => clearTimeout(timer);
-  }, [cooldown]);
+  // Tidak ada jaringan: password dicocokkan lokal, cookie diterbitkan langsung,
+  // lalu middleware membiarkan request /admin berikutnya lewat.
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-  const submit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (busy || cooldown > 0) return;
+    if (!password.trim()) {
+      setError('Password wajib diisi.');
+      inputRef.current?.focus();
+      return;
+    }
 
-      // Validasi field sebelum menyentuh jaringan: request kosong hanya
-      // menghabiskan kuota rate limit.
-      if (!password.trim()) {
-        setError('Password wajib diisi.');
-        inputRef.current?.focus();
-        return;
-      }
+    if (password !== ADMIN_PASSWORD) {
+      setError('Password salah. Periksa kembali lalu coba lagi.');
+      setPassword('');
+      inputRef.current?.focus();
+      return;
+    }
 
-      setBusy(true);
-      setError(null);
-      try {
-        const response = await fetch(`${API_BASE}/api/admin/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password }),
-          credentials: 'include',
-        });
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-
-        if (response.ok) {
-          router.replace(from);
-          router.refresh();
-          return;
-        }
-
-        const message = payload?.error ?? `Login ditolak (HTTP ${response.status})`;
-        setError(message);
-        setPassword('');
-        if (response.status === 429) {
-          const seconds = parseRetrySeconds(message);
-          if (seconds) setCooldown(seconds);
-        }
-        inputRef.current?.focus();
-      } catch {
-        setError('Tidak bisa menghubungi server. Periksa koneksi lalu coba lagi.');
-      } finally {
-        setBusy(false);
-      }
-    },
-    [busy, cooldown, from, password, router],
-  );
-
-  const locked = cooldown > 0;
+    setError(null);
+    // Sesi demo 7 hari — nama cookie harus persis 'admin_session'.
+    document.cookie = `${ADMIN_SESSION_COOKIE}=local-demo; path=/; max-age=604800; SameSite=Lax`;
+    router.push(from);
+  }
 
   return (
     <form onSubmit={submit} className="flex flex-col" noValidate>
@@ -119,7 +104,6 @@ function LoginForm() {
             setPassword(event.target.value);
             setError(null);
           }}
-          disabled={busy || locked}
           placeholder="Masukkan password"
           aria-describedby="password-hint"
           aria-invalid={error ? true : undefined}
@@ -131,22 +115,18 @@ function LoginForm() {
           id="password-hint"
           className="mt-2 border border-dashed border-rule px-2 py-1.5 text-[11px] text-ink-soft"
         >
-          Password diatur oleh admin melalui konfigurasi server, bukan dibagikan di halaman ini.
-          Akun demo dicatat di README.
+          Password diatur lewat env NEXT_PUBLIC_ADMIN_PASSWORD (default: admin123) dan dicocokkan
+          lokal di browser — tanpa server. Gate demo: password ikut bundle client (README).
         </p>
 
         <button
           type="submit"
-          disabled={busy || locked}
-          aria-busy={busy}
-          className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 border border-ink bg-ink px-4 text-[12.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent disabled:cursor-not-allowed disabled:border-rule disabled:bg-transparent disabled:text-ink-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 border border-ink bg-ink px-4 text-[12.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          {busy ? <Spinner /> : null}
-          {busy ? 'Memverifikasi…' : locked ? `Tunggu ${cooldown} detik` : 'Masuk ke back office'}
+          Masuk ke back office
         </button>
 
-        {/* Pesan galat dari server ditampilkan apa adanya, termasuk 429 dengan
-            sisa waktu, supaya penyebabnya jelas tanpa menebak. */}
+        {/* Pesan galat tampil inline: password salah atau field kosong. */}
         <p
           role="alert"
           aria-live="polite"
@@ -236,9 +216,7 @@ export default function AdminLogin() {
           <p className="mb-3 font-mono text-[10px] tracking-wider text-ink-soft uppercase">
             Formulir masuk
           </p>
-          <Suspense fallback={<p className="text-[12px] text-ink-soft">Memuat formulir…</p>}>
-            <LoginForm />
-          </Suspense>
+          <LoginForm />
         </div>
       </main>
     </div>

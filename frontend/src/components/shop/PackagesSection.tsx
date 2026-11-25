@@ -1,64 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { Reveal } from './Reveal';
-import {
-  type PackageOption,
-  formatRupiah,
-  packageEta,
-  packageGuarantee,
-  packageSummary,
-} from './types';
-import { fetchPackages } from '@/lib/packages';
-
-type State =
-  | { phase: 'loading' }
-  | { phase: 'ready'; packages: PackageOption[] }
-  | { phase: 'error'; message: string };
+import { formatRupiah, packageEta, packageGuarantee, packageSummary } from './types';
+import { PACKAGES } from '@/lib/packages';
 
 /**
- * Section harga: dua kartu paket dari GET /api/packages (docs/REDESIGN.md §2).
- * Harga, kuota, estimasi waktu, dan garansi tidak pernah ditulis tangan di UI —
- * semuanya datang dari endpoint ini, dan kegagalan endpoint tampil sebagai state
- * error dengan tombol coba lagi, bukan harga karangan.
+ * Section harga: dua kartu paket statis dari PACKAGES (docs/FRONTEND-ONLY.md).
+ * Harga, kuota, estimasi waktu, dan garansi didefinisikan satu tempat di
+ * frontend/src/lib/packages.ts — tidak ada fetch, tidak ada state loading/error.
  *
  * ETA + garansi sengaja diletakkan di atas tombol ajakan: titik keraguan
  * customer adalah "cemas bayar tanpa hasil jelas".
  */
 export function PackagesSection() {
-  const [state, setState] = useState<State>({ phase: 'loading' });
-  const aliveRef = useRef(true);
-
-  const load = useCallback(async () => {
-    setState({ phase: 'loading' });
-    const result = await fetchPackages();
-    if (!aliveRef.current) return;
-    if (!result.ok) {
-      setState({ phase: 'error', message: result.error ?? 'Daftar paket tidak bisa dimuat.' });
-      return;
-    }
-    setState({ phase: 'ready', packages: result.packages });
-  }, []);
-
-  // Pemuatan awal memakai rantai promise supaya tidak ada setState sinkron
-  // di dalam effect (react-hooks/set-state-in-effect); `load` hanya untuk
-  // tombol coba lagi yang dijalankan dari event handler.
-  useEffect(() => {
-    aliveRef.current = true;
-    fetchPackages().then((result) => {
-      if (!aliveRef.current) return;
-      if (!result.ok) {
-        setState({ phase: 'error', message: result.error ?? 'Daftar paket tidak bisa dimuat.' });
-        return;
-      }
-      setState({ phase: 'ready', packages: result.packages });
-    });
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
-
   return (
     <Reveal as="section" id="paket" className="scroll-mt-24 border-t border-ink bg-paper">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
@@ -72,62 +27,21 @@ export function PackagesSection() {
             </h2>
           </div>
           <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
-            Seluruh angka diambil dari server saat halaman dibuka. Bila daftar paket belum bisa
-            dimuat, kami menampilkan keadaannya apa adanya — bukan harga tebakan.
+            Seluruh angka tercantum apa adanya pada daftar paket — bukan harga tebakan.
           </p>
         </div>
 
         <div className="mt-10" aria-live="polite">
-          {state.phase === 'loading' && (
-            <div aria-busy="true" className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft sm:col-span-2">
-                Memuat daftar paket dari server
-              </p>
-              {[0, 1].map((row) => (
-                <div key={row} className="border border-rule bg-surface p-6">
-                  <div className="h-4 w-32 animate-pulse bg-rule" aria-hidden="true" />
-                  <div className="mt-4 h-8 w-40 animate-pulse bg-rule" aria-hidden="true" />
-                  <div className="mt-4 h-3 w-full animate-pulse bg-rule" aria-hidden="true" />
-                  <div className="mt-2 h-3 w-2/3 animate-pulse bg-rule" aria-hidden="true" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {state.phase === 'error' && (
-            <div
-              role="alert"
-              className="flex flex-col gap-4 border border-danger bg-surface p-6 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">
-                  Daftar paket tidak tersedia
-                </p>
-                <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">{state.message}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void load()}
-                className="inline-flex min-h-11 shrink-0 items-center justify-center border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
-              >
-                Coba lagi
-              </button>
-            </div>
-          )}
-
-          {state.phase === 'ready' && state.packages.length === 0 && (
+          {PACKAGES.length === 0 ? (
             <div className="border border-dashed border-rule bg-surface p-6">
               <p className="text-[13px] font-semibold">Belum ada paket yang terdaftar</p>
               <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
-                Server belum mengirim paket apa pun. Muat ulang halaman setelah daftar paket
-                diisi.
+                Daftar paket kosong. Muat ulang halaman setelah daftar paket diisi.
               </p>
             </div>
-          )}
-
-          {state.phase === 'ready' && state.packages.length > 0 && (
+          ) : (
             <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2" data-testid="package-list">
-              {state.packages.map((pkg) => {
+              {PACKAGES.map((pkg) => {
                 const eta = packageEta(pkg);
                 const guarantee = packageGuarantee(pkg);
                 return (

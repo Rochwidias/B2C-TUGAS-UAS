@@ -1,31 +1,28 @@
 # Aether Creative
 
-B2C **platform pembuatan poster** untuk UMKM — tugas UAS. Customer memilih contoh
-poster per segmen, mengisi brief merek + kontak, lalu **pesanan dicatat di web
-dan konfirmasi/serah terima hasil lewat WhatsApp (`wa.me`)**. Konten poster
-disusun **editor manusia lewat back-office** — tidak ada AI (tidak ada
-`POST /api/drafts`, tidak ada Gemini, tidak ada generator lokal).
+B2C **platform pembuatan poster** untuk UMKM — tugas UAS. Aplikasi ini kini
+**frontend-only**: tidak ada backend, tidak ada database, tidak ada API. Seluruh
+data (katalog, paket, pesanan) hidup di **localStorage browser**, per perangkat.
+Konten poster disusun **editor manusia lewat back-office** — tidak ada AI.
 
-Alur kerja: **Brief merek → Editor validasi → Hasil siap pakai.**
+Alur kerja: **Brief merek → Editor validasi → Hasil siap pakai**, lalu
+konfirmasi dan serah terima hasil berjalan lewat **WhatsApp (`wa.me`)**.
 
-Arah desain & kontrak teknis terbaru ada di [`docs/WHATSAPP-FLOW.md`](docs/WHATSAPP-FLOW.md)
-(**kontrak yang berlaku**) dan [`docs/REDESIGN.md`](docs/REDESIGN.md) (menggantikan
-bagian `docs/SPEC.md` yang bertentangan). Rencana bisnis awal
-(Milestone 1, merek CraftAI Studio) tetap disimpan utuh di [`PLAN.md`](PLAN.md)
-beserta prototype statisnya di [`index.html`](index.html).
+> **Kontrak yang berlaku: [`docs/FRONTEND-ONLY.md`](docs/FRONTEND-ONLY.md)**
+> (2026-11-25). Dokumen `docs/SPEC.md`, `docs/REDESIGN.md`, dan
+> `docs/WHATSAPP-FLOW.md` bersifat **historis** — bagian yang menyebut API,
+> backend, atau database sudah tidak berlaku. Folder `backend/` dan
+> `render.yaml` sudah dihapus total.
 
 ## Harga
 
-Diambil dari `GET /api/packages` (satu-satunya sumber harga, estimasi, dan garansi):
+Harga, estimasi, dan garansi kini **data statis di frontend**
+(`frontend/src/lib/packages.ts`) — ditampilkan sebelum customer mengirim pesanan:
 
 | Paket | Harga | Cakupan | Estimasi | Garansi |
 |---|---|---|---|---|
-| **Satuan** | Rp50.000 / order | 1 poster | 2–4 jam kerja | Revisi 2× dalam 3 hari |
-| **Paket Hemat** | Rp100.000 | 3 order + review editor | 1–3 hari kerja | Revisi 3× dalam 7 hari, termasuk review editor |
-
-Estimasi dan garansi ditampilkan **sebelum customer membayar** — ini jawaban atas
-dua titik keraguan terbesar dari customer journey: "cemas bayar tanpa hasil jelas"
-dan "pilihan paket membingungkan".
+| **Satuan** | Rp50.000 | 1 poster | 2–4 jam kerja | Revisi 2× dalam 3 hari |
+| **Paket Hemat** | Rp100.000 | 3 poster + review editor | 1–3 hari kerja | Revisi 3× dalam 7 hari |
 
 ## Target
 
@@ -33,107 +30,96 @@ Mahasiswa & pelajar Yogyakarta yang punya tugas dan usaha sampingan; segmen
 tambahan kreator/portofolio digital dan toko online. Aktif di Instagram, TikTok,
 dan WhatsApp, ingin tampil profesional di bidang desain.
 
-## Deploy
+## Menjalankan — satu terminal
 
-Deploy produksi: **frontend di Vercel** (root directory `frontend`) + **backend
-di Render** (blueprint `render.yaml`). Semua trafik lewat rewrite Next.js (satu
-origin) sehingga tanpa CORS di produksi. Panduan langkah demi langkah:
-[`docs/DEPLOY.md`](docs/DEPLOY.md).
+```bash
+cd frontend && npm install && npm run dev    # http://localhost:3000
+```
 
-- Vercel — https://vercel.com/new
-- Render — https://render.com (New+ -> Blueprint -> pilih repo)
+Tidak ada server lain yang perlu dinyalakan. Semua halaman (customer dan
+back-office) dilayani Next.js ini; datanya ada di browser masing-masing.
 
-## Arsitektur: dua proyek terpisah
+## Arsitektur: satu aplikasi, data di browser
 
 ```
 B2C-TUGAS-UAS/
-  backend/    Express + node:sqlite  — semua endpoint /api/*        (port 4000)
-  frontend/   Next.js 16 App Router  — UI saja, fetch ke backend     (port 3000)
+  frontend/   Next.js 16 App Router + TypeScript + Tailwind   (port 3000)
 ```
 
-- **backend/** — API murni: katalog contoh poster, paket harga, konten poster
-  (disimpan editor via `PUT /api/admin/orders/:id/poster`, `engine = 'manual'`),
-  `GET /api/contact` (link `wa.me` dari env `WHATSAPP_NUMBER`), order, kuota
-  paket, revisi, delivery, login admin, statistik, export HTML poster. Database
-  `backend/data/app.db` (sqlite bawaan Node, auto-create + migrasi idempoten +
-  seed). Gate admin & rate limit per IP hidup di sini.
-- **frontend/** — halaman customer (`/`, `/customizer/[id]`, `/orders`) dan
-  back-office (`/admin`). Semua akses data lewat `fetch` ke `NEXT_PUBLIC_API_URL`
-  (default `http://localhost:4000`); tidak ada route `/api` dan tidak ada akses
-  DB langsung di Next.js. Route `/api/*` diteruskan ke backend via rewrite di
-  `next.config.ts` (`BACKEND_ORIGIN`, default `http://localhost:4000`) supaya
-  satu origin juga tetap jalan.
+- **Next.js App Router + TypeScript + Tailwind** — satu-satunya proyek. Tidak
+  ada route `/api`, tidak ada fetch ke server manapun, tidak ada database.
+- **Data di localStorage browser, per perangkat** — pesanan tidak pernah
+  meninggalkan perangkat yang dipakai. Order yang dibuat customer tampil di
+  kanban admin pada **browser yang sama**; browser/perangkat lain tidak melihat
+  datanya. Ini memang aplikasi demo, bukan multi-user.
+- **`frontend/src/lib/orders-store.ts` satu pintu** — satu-satunya modul yang
+  menyentuh `localStorage['aether-orders']`. Shop dan admin sama-sama membaca
+  store ini; komponen dilarang menulis key localStorage sendiri. Skema lengkap
+  ada di [`docs/FRONTEND-ONLY.md`](docs/FRONTEND-ONLY.md).
+- **Katalog & paket statis** — `CATALOG_TEMPLATES` (3 kartu poster) dan
+  `PACKAGES` (2 kartu paket) di `frontend/src/lib/`.
+- **Kontak WhatsApp** dari env `NEXT_PUBLIC_WHATSAPP_NUMBER` yang dirakit
+  menjadi link `https://wa.me/<number>` (Buka WhatsApp saat checkout, Chat via
+  WhatsApp di `/orders`, Chat ke Customer di back-office).
 
-## Menjalankan
-
-Dua terminal:
+## Env frontend
 
 ```bash
-# terminal 1 — backend
-cd backend && npm install && npm start        # http://localhost:4000
-
-# terminal 2 — frontend
-cd frontend && npm install && npm start       # http://localhost:3000
+# frontend/.env.local
+NEXT_PUBLIC_WHATSAPP_NUMBER=6281234567890   # nomor WA bisnis, tanpa '+' — WAJIB diganti di produksi
+NEXT_PUBLIC_ADMIN_PASSWORD=admin123         # password back-office (default admin123)
+NEXT_PUBLIC_SITE_URL=http://localhost:3000  # opsional: base URL untuk metadata/sitemap/robots
 ```
 
-Dev mode: `npm run dev` di masing-masing folder.
+Semua variabel berawalan `NEXT_PUBLIC_`, artinya nilainya **ikut bundle
+client**. `NEXT_PUBLIC_WHATSAPP_NUMBER` dengan placeholder `6281234567890`
+**wajib diganti** di produksi (lihat [`docs/DEPLOY.md`](docs/DEPLOY.md)) agar
+pesanan masuk ke nomor WhatsApp yang benar.
+
+## Akun demo
+
+- **Pesanan demo**: nomor **UK-ORD-8812** — otomatis di-seed ke localStorage
+  saat penyimpanan masih kosong. Lacak di `/orders` (bisa langsung buka
+  `/orders?number=UK-ORD-8812`).
+- **Back-office**: `/admin/login`, password `admin123` (diganti lewat env
+  `NEXT_PUBLIC_ADMIN_PASSWORD`). Setelah login, kanban menampilkan pesanan
+  (termasuk demo) dan status bisa dipindah antar kolom.
+
+> **Gate admin tingkat demo.** Password dibandingkan di sisi client dan cookie
+> `admin_session` di-set lewat `document.cookie`; middleware hanya memeriksa
+> keberadaan cookie. Karena `NEXT_PUBLIC_ADMIN_PASSWORD` ikut bundle client,
+> gate ini **bukan keamanan produksi** — cukup untuk demo/dokumentasi tugas.
+> Jangan simpan data sensitif di aplikasi ini.
+
+## Verifikasi
+
+```bash
+cd frontend && npx tsc --noEmit && npx eslint src && npm run build
+```
+
+Suite uji (Python + Playwright, headless chromium; server Next dinyalakan
+sendiri oleh skrip):
+
+```bash
+pytest frontend/tests/test_e2e.py frontend/tests/test_features.py
+# atau sekali jalan dengan server otomatis:
+cd frontend && bash tests/verify.sh
+```
 
 ## Struktur
 
 ```
 PLAN.md            dokumen perencanaan awal (Milestone 1, CraftAI Studio)
 index.html         prototype HTML statis (Milestone 1)
-docs/WHATSAPP-FLOW.md  kontrak yang berlaku: alur pesanan & serah terima WhatsApp
-docs/REDESIGN.md   kontrak desain: identitas, paket, skema konten poster, API, halaman
-docs/SPEC.md       kontrak teknis lama (berlaku sejauh tidak bertentangan)
-docs/DEPLOY.md     panduan deploy Vercel + Render
-backend/           API Express
-  src/index.ts     server HTTP: CORS, cookie, security headers, mount routes
-  src/routes/      templates, packages, contact, orders, delivery, admin, export
-  src/services/    orders (checkout, kuota, revisi), stats (agregat admin)
-  src/lib/         db, brief, whatsapp, render, validate, security, ratelimit, http
-  src/middleware/  adminAuth (verifikasi token sesi)
-  data/app.db      sqlite (auto-create, migrasi idempoten, seed idempoten)
-frontend/          Next.js (App Router + TypeScript + Tailwind)
+docs/FRONTEND-ONLY.md  KONTRAK BERLAKU: frontend-only, localStorage, tanpa API
+docs/DEPLOY.md     panduan deploy Vercel (frontend-only)
+docs/SPEC.md       kontrak teknis lama — HISTORIS
+docs/REDESIGN.md   kontrak desain lama — HISTORIS
+docs/WHATSAPP-FLOW.md  kontrak alur WhatsApp lama — HISTORIS
+frontend/          Next.js 16 (App Router + TypeScript + Tailwind)
   src/app/         halaman: home, customizer, orders, admin, error, SEO
   src/components/  komponen React (client) — shop, admin, ui
-  src/lib/api.ts   API_BASE / API_BASE_SERVER untuk semua fetch
-  middleware.ts    gate halaman /admin/** (verifikasi sesi ke backend)
-  tests/           uji API, keamanan, e2e Playwright, fitur
+  src/lib/         catalog.ts, packages.ts, orders-store.ts (satu pintu localStorage)
+  middleware.ts    gate halaman /admin/** (cek cookie admin_session)
+  tests/           uji e2e + fitur (Playwright) dan verify.sh
 ```
-
-## Env backend
-
-```bash
-# backend/.env  (atau environment)
-ADMIN_PASSWORD=admin123      # password back-office
-WHATSAPP_NUMBER=6281234567890  # nomor WA bisnis, format internasional tanpa '+'
-```
-
-`WHATSAPP_NUMBER` dipakai `GET /api/contact` untuk merakit semua link
-`https://wa.me/<number>` (Buka WhatsApp saat checkout, Chat via WhatsApp di
-`/orders`, Chat ke Customer di back-office). Nilai default di atas adalah
-placeholder — **wajib diganti** di produksi (lihat [`docs/DEPLOY.md`](docs/DEPLOY.md)).
-
-## Akun demo
-
-Back-office: `/admin/login`, password `admin123` (bisa diganti lewat env
-`ADMIN_PASSWORD` **di backend/Render**; verifikasi sesi dilakukan oleh backend,
-bukan frontend). Pesanan demo seed: nomor **UK-ORD-8812** (dapat dilacak di
-`/orders`).
-
-## Verifikasi
-
-```bash
-cd backend  && npx tsc
-cd frontend && npx tsc --noEmit && npx eslint src && npm run build
-```
-
-Suite uji (Python + Playwright; tiap fase memakai backend baru karena rate limit
-in-memory):
-
-```bash
-bash /home/rochwidias/.hermes/cache/scratch/verify-linux.sh all   # api, security, e2e, features
-```
-
-Skrip asli Windows ada di `frontend/tests/verify.sh`.

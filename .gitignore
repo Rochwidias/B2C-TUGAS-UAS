@@ -9,10 +9,6 @@ venv/
 .env
 .env.local
 
-# Runtime database (dibuat otomatis saat server pertama jalan)
-frontend/data/
-backend/data/
-
 # Build output
 .next/
 out/

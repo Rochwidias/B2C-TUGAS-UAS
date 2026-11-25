@@ -1,160 +1,232 @@
-"""Uji fitur baru di browser nyata: toast, copy, filter, persistensi, 401.
+"""Uji fitur UI Aether Creative di browser nyata — FRONTEND-ONLY (tanpa backend).
 
-Menjalankan terhadap server produksi yang sudah hidup.
+Kontrak: docs/FRONTEND-ONLY.md. Backend/database sudah dihapus; fokus suite:
+halaman lacak + detail, persistensi brief di localStorage, skema store
+`aether-orders`, gate + kanban admin, 404, responsivitas, dan kebersihan JS.
+
+Server Next lokal SAJA (tanpa fixture backend):
+
+    cd frontend && PORT=3720 npx next dev -p 3720
+    BASE_URL=http://localhost:3720 pytest tests/test_features.py
 """
 import json
 import os
 import re
-import sys
+import tempfile
+import time
+
+import pytest
 from playwright.sync_api import sync_playwright
 
-BASE = os.environ.get("BASE_URL", "http://localhost:3500").rstrip("/")
-SHOT = os.environ.get("SHOT_DIR", "D:/hermes/cache/scratch/shots-features")
-PASS, FAIL = [], []
+BASE = os.environ.get("BASE_URL", "http://localhost:3720").rstrip("/")
+SHOT_DIR = os.environ.get("SHOT_DIR", os.path.join(tempfile.gettempdir(), "aether-shots"))
+os.makedirs(SHOT_DIR, exist_ok=True)
+
+DEMO_NUMBER = "UK-ORD-8812"
 
 
-def check(label, cond, detail=""):
-    (PASS if cond else FAIL).append(label)
-    print(f"{'PASS' if cond else 'FAIL'}  {label}" + (f"  [{detail}]" if detail and not cond else ""))
+def shot(page, name):
+    try:
+        page.screenshot(path=os.path.join(SHOT_DIR, name), full_page=False)
+    except Exception:  # noqa: BLE001 — screenshot tidak boleh menjatuhkan tes
+        pass
 
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
-    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
-    page = ctx.new_page()
-    errors = []
-    page.on("pageerror", lambda e: errors.append(str(e)))
+def poll_until(fn, timeout_s=15.0, interval=0.5):
+    """Panggil fn() sampai True (atau nilai terakhir saat waktu habis)."""
+    deadline = time.time() + timeout_s
+    last = None
+    while time.time() < deadline:
+        last = fn()
+        if last is True:
+            return True
+        time.sleep(interval)
+    return last
 
-    # ---------- 1. /orders: filter status ----------
-    page.goto(f"{BASE}/orders", wait_until="networkidle")
-    page.wait_for_timeout(500)
-    check("/orders judul ada", "lacak" in page.title().lower() or "pesanan" in page.title().lower(),
-          page.title())
-    check("/orders tidak overflow", page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1"))
 
-    # input cari
-    search = page.locator("input[type='search'], input[placeholder*='UK-ORD']").first
-    check("input cari nomor order ada", search.count() > 0)
+def track_demo(page):
+    """Isi nomor demo lalu lacak; hasil harus tampak."""
+    page.goto(f"{BASE}/orders", wait_until="domcontentloaded")
+    page.wait_for_selector("#order-number", state="visible")
+    page.fill("#order-number", DEMO_NUMBER)
+    page.locator("form button[type='submit']").first.click()
+    return page.wait_for_selector("[data-testid='track-result']", state="visible")
 
-    # ---------- 2. lacak order demo ----------
-    if search.count() > 0:
-        search.fill("UK-ORD-8812")
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(2000)
-        body = page.evaluate("() => document.body.innerText")
-        check("hasil lacak menampilkan nomor order", "UK-ORD-8812" in body.upper(), body[:120])
 
-    # ---------- 3. halaman detail order: tombol salin ----------
-    page.goto(f"{BASE}/orders", wait_until="networkidle")
-    page.wait_for_timeout(400)
-    if search.count() > 0:
-        search.fill("UK-ORD-8812")
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(2000)
+@pytest.fixture(scope="module")
+def browser():
+    with sync_playwright() as p:
+        b = p.chromium.launch(headless=True)
+        yield b
+        b.close()
 
-    # cari tautan ke detail
-    link = page.locator("a[href*='/orders/']").first
-    if link.count() > 0:
+
+@pytest.fixture()
+def page(browser):
+    context = browser.new_context(viewport={"width": 1280, "height": 900})
+    pg = context.new_page()
+    pg.set_default_timeout(45000)
+    yield pg
+    context.close()
+
+
+def test_01_orders_page_dan_input_cari(page):
+    page.goto(f"{BASE}/orders", wait_until="domcontentloaded")
+    page.wait_for_selector("#order-number", state="visible")
+    title = page.title().lower()
+    assert any(word in title for word in ("lacak", "pesanan", "aether")), f"judul aneh: {page.title()}"
+    assert "Aether" in page.evaluate("() => document.body.innerText"), "brand tidak tampak"
+    over = page.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
+    assert over <= 1, f"/orders overflow {over}px"
+    shot(page, "feat-01-orders.png")
+
+
+def test_02_lacak_demo_menampilkan_hasil(page):
+    result = track_demo(page)
+    text = result.inner_text()
+    assert DEMO_NUMBER in text, f"hasil lacak tanpa nomor demo: {text[:160]}"
+    shot(page, "feat-02-lacak-demo.png")
+
+
+def test_03_skema_store_aether_orders(page):
+    """localStorage['aether-orders'] berisi order demo dengan skema kontrak."""
+    track_demo(page)
+    raw = page.evaluate("() => localStorage.getItem('aether-orders')")
+    assert raw, "localStorage['aether-orders'] kosong padahal demo di-seed"
+    orders = json.loads(raw)
+    assert isinstance(orders, list) and len(orders) >= 1, "store bukan daftar order"
+    demo = next((o for o in orders if o.get("order_number") == DEMO_NUMBER), None)
+    assert demo is not None, f"order demo {DEMO_NUMBER} tidak ada di store"
+    for field in ("id", "status", "logs", "drafts", "created_at", "updated_at"):
+        assert field in demo, f"skema order kurang field '{field}'"
+    assert isinstance(demo["logs"], list) and demo["logs"], "order demo tanpa log"
+    assert isinstance(demo["drafts"], list) and demo["drafts"], "order demo tanpa draft"
+
+
+def test_04_detail_order_dan_tombol_salin(browser):
+    context = browser.new_context(viewport={"width": 1280, "height": 900})
+    try:
+        context.grant_permissions(["clipboard-read", "clipboard-write"], origin=BASE)
+        pg = context.new_page()
+        pg.set_default_timeout(45000)
+        track_demo(pg)
+        link = pg.locator("a[href*='/orders/']").first
+        if link.count() == 0:
+            pytest.skip("halaman hasil lacak tidak menautkan detail order")
         href = link.get_attribute("href")
-        page.goto(BASE + href, wait_until="networkidle")
-        page.wait_for_timeout(1200)
-        body = page.evaluate("() => document.body.innerText")
-        check("detail order render nomor", "UK-ORD-8812" in body.upper(), body[:100])
-        copy_buttons = page.locator("button:has-text('Salin')")
-        check("tombol salin ada di detail", copy_buttons.count() > 0, f"jumlah={copy_buttons.count()}")
-        if copy_buttons.count() > 0:
-            copy_buttons.first.click()
-            page.wait_for_timeout(700)
-            body = page.evaluate("() => document.body.innerText")
-            check("toast konfirmasi salin muncul", "tersalin" in body.lower() or "salin" in body.lower(), body[:200])
-        page.screenshot(path=f"{SHOT}/detail-order.png", full_page=False)
+        pg.goto(BASE + href, wait_until="domcontentloaded")
+        pg.wait_for_timeout(1200)
+        body = pg.evaluate("() => document.body.innerText")
+        assert DEMO_NUMBER in body.upper(), f"detail order tanpa nomor: {body[:140]}"
 
-    # ---------- 4. customizer: validasi + persistensi ----------
-    page.goto(f"{BASE}/customizer/artisan-cafe", wait_until="networkidle")
-    page.wait_for_timeout(800)
+        copy_btn = pg.locator("button:has-text('Salin')")
+        assert copy_btn.count() > 0, "tombol salin tidak ada di detail order"
+        copy_btn.first.click()
+        pg.wait_for_timeout(800)
+        body = pg.evaluate("() => document.body.innerText")
+        assert "tersalin" in body.lower() or "salin" in body.lower(), (
+            f"konfirmasi salin tidak tampak: {body[:200]}"
+        )
+        shot(pg, "feat-04-detail-order.png")
+    finally:
+        context.close()
 
-    brand = page.locator("input[name='brandName'], input[placeholder*='kopi' i], #brief-brand, #brandName").first
-    if brand.count() == 0:
-        brand = page.locator("form input, form textarea").first
-    check("form brief ada", brand.count() > 0)
 
-    # isi sebagian lalu reload -> harus terpulihkan
-    if brand.count() > 0:
-        brand.fill("Warung Uji Otomatis")
-        page.wait_for_timeout(900)  # debounce simpan
-        page.reload(wait_until="networkidle")
-        page.wait_for_timeout(1200)
-        body = page.evaluate("() => document.body.innerText")
-        brand2 = page.locator("form input, form textarea").first
-        val = brand2.input_value() if brand2.count() > 0 else ""
-        check("brief terpulihkan dari localStorage",
-              val == "Warung Uji Otomatis" or "Warung Uji Otomatis" in body,
-              f"nilai={val!r}")
+def test_05_customizer_brief_terpulihkan_dari_localstorage(page):
+    page.goto(f"{BASE}/customizer/artisan-cafe", wait_until="domcontentloaded")
+    page.wait_for_selector("#brief-brand", state="visible")
+    page.fill("#brief-brand", "Warung Uji Otomatis")
+    page.wait_for_timeout(1000)  # debounce simpan draf
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("#brief-brand", state="visible")
 
-    # penghitung karakter (batas per field kini 240/140/60/40, bukan 800)
-    desc = page.locator("textarea").first
-    if desc.count() > 0:
-        desc.fill("Uji deskripsi yang cukup panjang untuk memicu penghitung karakter.")
-        page.wait_for_timeout(500)
-        body = page.evaluate("() => document.body.innerText")
-        check("penghitung karakter tampil", re.search(r"/\s?\d{2,4}", body) is not None, body[:300])
+    # Nilai terisi setelah hidrasi + effect pemulihan; baca dengan poll,
+    # bukan seketika, supaya tidak kalah cepat dari hidrasi React.
+    holder = {"value": ""}
 
-    # tombol kirim pesanan (AI sudah dibuang, tidak ada lagi Generate)
-    gen = page.locator("button:has-text('Kirim Pesanan via WhatsApp'), button:has-text('WhatsApp'),"
-                       " button:has-text('Generate')")
-    check("tombol kirim pesanan WhatsApp ada", gen.count() > 0, f"jumlah={gen.count()}")
-    page.screenshot(path=f"{SHOT}/customizer.png", full_page=False)
+    def restored():
+        holder["value"] = page.locator("#brief-brand").input_value()
+        return holder["value"] == "Warung Uji Otomatis"
 
-    # ---------- 5. admin: login + 401 state ----------
-    page.goto(f"{BASE}/admin", wait_until="networkidle")
-    page.wait_for_timeout(800)
-    check("belum login -> diarahkan ke login", "/admin/login" in page.url, page.url)
+    assert poll_until(restored, timeout_s=20), (
+        f"brief tidak terpulihkan: {holder['value']!r}"
+    )
+    shot(page, "feat-05-brief-persist.png")
 
-    pwd = page.locator("input[type='password']").first
-    check("field password ada", pwd.count() > 0)
-    if pwd.count() > 0:
-        pwd.fill("admin123")
-        page.locator("button[type='submit']").first.click()
-        page.wait_for_timeout(2500)
-        check("login berhasil -> /admin", page.url.rstrip("/").endswith("/admin"), page.url)
-        body = page.evaluate("() => document.body.innerText")
-        check("dashboard admin render", "papan" in body.lower() or "backlog" in body.lower(), body[:150])
-        check("statistik tampil", "Rp" in body, body[:200])
-        page.screenshot(path=f"{SHOT}/admin-dashboard.png", full_page=False)
 
-        # filter & cari
-        search_admin = page.locator("input[type='search'], input[placeholder*='Cari']").first
-        check("input cari admin ada", search_admin.count() > 0)
-        if search_admin.count() > 0:
-            search_admin.fill("8812")
-            page.wait_for_timeout(900)
-            body = page.evaluate("() => document.body.innerText")
-            check("filter admin menyaring hasil", "8812" in body or "tidak ada" in body.lower(), body[:200])
-
-    # ---------- 6. 404 ----------
-    page.goto(f"{BASE}/halaman-tidak-ada", wait_until="networkidle")
+def test_06_customizer_counter_dan_tombol_kirim(page):
+    page.goto(f"{BASE}/customizer/artisan-cafe", wait_until="domcontentloaded")
+    page.wait_for_selector("#brief-desc", state="visible")
+    page.fill("#brief-desc", "Deskripsi uji untuk memicu penghitung karakter di layar.")
     page.wait_for_timeout(400)
     body = page.evaluate("() => document.body.innerText")
-    check("404 halaman kustom tampil", "tidak ditemukan" in body.lower(), body[:120])
+    assert re.search(r"/\s?\d{2,4}", body) is not None, "penghitung karakter tidak tampil"
+    submit = page.locator("button:has-text('Kirim Pesanan via WhatsApp')")
+    assert submit.count() > 0, "tombol 'Kirim Pesanan via WhatsApp' tidak ada"
+    shot(page, "feat-06-customizer.png")
 
-    # ---------- 7. error JS ----------
-    check("tidak ada error JS di halaman", len(errors) == 0, str(errors[:2]))
 
-    # ---------- 8. responsif 320px ----------
-    for width in (320, 375, 768):
-        ctx2 = browser.new_context(viewport={"width": width, "height": 800})
-        pg = ctx2.new_page()
+def test_07_admin_gate_arahkan_ke_login(page):
+    page.goto(f"{BASE}/admin", wait_until="domcontentloaded")
+    page.wait_for_url("**/admin/login**", timeout=45000)
+    assert "/admin/login" in page.url, f"tanpa cookie tidak dilempar ke login: {page.url}"
+    pwd = page.locator("input[type='password']")
+    assert pwd.count() > 0, "field password tidak ada di halaman login"
+
+
+def test_08_admin_login_kanban_statistik_cari(page):
+    # Seed demo dulu di konteks ini supaya kanban punya isi.
+    page.goto(f"{BASE}/orders?number={DEMO_NUMBER}", wait_until="domcontentloaded")
+    page.wait_for_selector("[data-testid='track-result']", state="visible")
+
+    page.goto(f"{BASE}/admin/login", wait_until="domcontentloaded")
+    page.fill("input[type='password']", "admin123")
+    page.locator("form button[type='submit']").first.click()
+    page.wait_for_url(re.compile(r"/admin/?$"), timeout=45000)
+    page.wait_for_selector("h2:text-is('Backlog')", state="visible", timeout=45000)
+    assert page.get_by_text(DEMO_NUMBER).count() > 0, "pesanan demo tidak tampil di kanban"
+
+    body = page.evaluate("() => document.body.innerText")
+    assert "Rp" in body, f"statistik (Rp) tidak tampak: {body[:200]}"
+
+    search = page.locator("input[type='search'], input[placeholder*='Cari' i]").first
+    if search.count():
+        search.fill(DEMO_NUMBER)
+        page.wait_for_timeout(900)
+        assert page.get_by_text(DEMO_NUMBER).count() > 0, "pencarian menyembunyikan demo"
+        search.fill("")
+        page.wait_for_timeout(500)
+    shot(page, "feat-08-admin.png")
+
+
+def test_09_halaman_404_kustom(page):
+    page.goto(f"{BASE}/halaman-tidak-ada", wait_until="domcontentloaded")
+    page.wait_for_timeout(800)
+    body = page.evaluate("() => document.body.innerText")
+    assert "tidak ditemukan" in body.lower(), f"404 kustom tidak tampil: {body[:140]}"
+
+
+def test_10_tanpa_error_js_di_halaman_utama(page):
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    for path in ("/", "/orders", "/customizer/artisan-cafe", "/admin/login"):
+        page.goto(BASE + path, wait_until="domcontentloaded")
+        page.wait_for_timeout(700)
+    assert not errors, f"pageerror JS: {errors[:3]}"
+
+
+@pytest.mark.parametrize("width", [320, 375, 768])
+def test_11_responsif_tanpa_overflow(browser, width):
+    context = browser.new_context(viewport={"width": width, "height": 800})
+    pg = context.new_page()
+    pg.set_default_timeout(45000)
+    try:
         for path in ("/", "/orders"):
-            pg.goto(BASE + path, wait_until="networkidle")
+            pg.goto(BASE + path, wait_until="domcontentloaded")
             pg.wait_for_timeout(600)
-            over = pg.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
-            check(f"{width}px {path} tanpa overflow", over <= 1, f"selisih={over}px")
-        ctx2.close()
-
-    browser.close()
-
-print()
-print(f"{len(PASS)}/{len(PASS) + len(FAIL)} lolos")
-if FAIL:
-    print("GAGAL:", *FAIL, sep="\n  - ")
-sys.exit(1 if FAIL else 0)
+            over = pg.evaluate(
+                "() => document.documentElement.scrollWidth - window.innerWidth"
+            )
+            assert over <= 1, f"{width}px {path} overflow {over}px"
+    finally:
+        context.close()

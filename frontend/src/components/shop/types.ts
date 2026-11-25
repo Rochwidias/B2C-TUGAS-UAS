@@ -1,6 +1,6 @@
-// Kontrak JSON yang di-fetch dari route API (docs/REDESIGN.md §4-§5).
-// Sengaja didefinisikan lokal di folder shop agar halaman customer tidak
-// bergantung pada struktur internal src/lib milik Agent-BACKEND.
+// Kontrak tipe data aplikasi customer (docs/REDESIGN.md §4-§5). Sengaja
+// didefinisikan lokal di folder shop; sumber datanya kini statis/store lokal
+// (docs/FRONTEND-ONLY.md), bukan route API.
 
 export type ThemeColorKey = 'violet' | 'navy' | 'amber' | 'emerald';
 export type OrderStatus = 'draft' | 'paid' | 'in_progress' | 'review' | 'completed';
@@ -14,7 +14,7 @@ export interface Template {
   base_price: number;
   preview_gradient: string;
   is_active: number;
-  /** Kunci paket yang disarankan backend per segmen (mis. 'hemat'). */
+  /** Kunci paket yang disarankan per segmen (mis. 'hemat'). */
   recommendedPackage?: string | null;
 }
 
@@ -46,9 +46,9 @@ export interface Brief {
 }
 
 /**
- * Body POST /api/orders (docs/WHATSAPP-FLOW.md §Baru). Medan bentuk-form lama
- * tetap ikut dikirim agar ringkasan brief di back-office tetap terbaca, sementara
- * medan bernama kontrak (`merekLokasi`, `segmenTarget`, ...) diisi dari form.
+ * Brief lengkap yang disimpan pada order di store lokal. Medan bernama kontrak
+ * (`merekLokasi`, `segmenTarget`, ...) diisi dari form, sementara medan brief
+ * lama tetap ada agar ringkasan di back-office tetap terbaca.
  */
 export interface OrderBriefPayload extends Brief {
   merekLokasi?: string;
@@ -58,14 +58,14 @@ export interface OrderBriefPayload extends Brief {
   nadaRekaman?: string;
 }
 
-/** Kontak pelanggan — dikirim nested, tanpa prefiks `contact`. */
+/** Kontak pelanggan — disimpan nested, tanpa prefiks `contact`. */
 export interface OrderContact {
   name: string;
   whatsapp: string;
   email?: string;
 }
 
-/** Hasil GET /api/contact: nomor WA resmi dari env `WHATSAPP_NUMBER`. */
+/** Kontak WhatsApp resmi: env `NEXT_PUBLIC_WHATSAPP_NUMBER` (data statis lokal). */
 export interface ContactInfo {
   whatsappNumber: string;
   whatsappUrl: string;
@@ -122,28 +122,7 @@ export interface OrderResponse {
   remaining?: number;
 }
 
-export interface OrderCreatedResponse {
-  order: Order;
-  /** Kontrak baru membungkus respons dalam `{data: {order, whatsappUrl}}`. */
-  whatsappUrl?: string;
-  /** Medan lama; bila absen, nomor diambil dari `order.order_number`. */
-  orderNumber?: string;
-}
-
-/**
- * Buka body respons apa pun: kontrak baru membungkus payload dalam `data`,
- * sedangkan route lama mengirimnya di level teratas.
- */
-export function unwrapData<T extends object>(body: T & { data?: T }): T {
-  return body.data ?? body;
-}
-
-/** Semua route API mengembalikan `{error}` pada status non-2xx. */
-export interface ApiError {
-  error: string;
-}
-
-/** Kartu paket dari GET /api/packages (docs/REDESIGN.md §2). */
+/** Kartu paket statis (docs/REDESIGN.md §2). */
 export interface PackageOption {
   key: string;
   name: string;
@@ -221,12 +200,12 @@ export function formatRupiah(value: number): string {
   return `Rp ${value.toLocaleString('id-ID')}`;
 }
 
-/** Estimasi waktu kerja dari kartu paket; kosong bila backend tidak mengirim. */
+/** Estimasi waktu kerja dari kartu paket; kosong bila kartu tidak mengisinya. */
 export function packageEta(pkg: PackageOption): string {
   return (pkg.eta ?? '').trim() || (pkg.etaGuarantee ?? '').trim();
 }
 
-/** Garansi dari kartu paket. Bila backend hanya mengirim eta gabungan dan eta
+/** Garansi dari kartu paket. Bila kartu hanya mengirim eta gabungan dan eta
  *  sudah dipakai di atas, baris garansi disembunyikan (bukan diisi teks dobel). */
 export function packageGuarantee(pkg: PackageOption): string {
   const guarantee = (pkg.guarantee ?? '').trim();
@@ -234,22 +213,9 @@ export function packageGuarantee(pkg: PackageOption): string {
   return pkg.eta ? '' : (pkg.etaGuarantee ?? '').trim();
 }
 
-/** Deskripsi isi paket: diprioritaskan dari backend, bukan teks hardcode. */
+/** Deskripsi isi paket: teks deskriptif dari kartu, bukan teks hardcode di UI. */
 export function packageSummary(pkg: PackageOption): string {
   const text = (pkg.description ?? pkg.summary ?? '').trim();
   if (text) return text;
   return `${pkg.quota} poster per order`;
-}
-
-/** Baca body JSON apa pun: 2xx → data, selain itu → pesan error dari server. */
-export async function readJson<T>(res: Response): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    body = null;
-  }
-  if (res.ok) return { ok: true, data: body as T };
-  const msg = (body as ApiError | null)?.error;
-  return { ok: false, error: msg ?? `Permintaan gagal (HTTP ${res.status}).` };
 }

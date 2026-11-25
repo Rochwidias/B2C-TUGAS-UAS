@@ -9,9 +9,8 @@ import {
 
 // Kartu contoh poster: permukaan putih bersih, garis 1px, bayangan keras yang
 // bergeser saat hover (tanpa blur). Kartu menampilkan harga satuan dan, bila
-// tersedia, paket yang disarankan server (recommendedPackage dari
-// GET /api/templates) — nama paket diambil dari GET /api/packages, bukan
-// ditulis tangan.
+// tersedia, paket yang disarankan untuk segmen itu (recommendedPackage pada
+// CATALOG_TEMPLATES) — nama paket diambil dari PACKAGES, bukan ditulis tangan.
 export function TemplateCard({
   template,
   recommended = null,

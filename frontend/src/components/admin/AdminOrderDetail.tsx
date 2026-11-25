@@ -1,11 +1,15 @@
-// Detail order back office. Halaman route (server) mengoper `orderId` dari
-// params; komponen ini tidak memakai useParams karena hook itu tidak pernah
-// resolve saat hard load pada rute PPR — halaman akan tersangkut di fallback.
+// Detail order back office versi frontend-only (docs/FRONTEND-ONLY.md).
+// Halaman route (server) mengoper `orderId` dari params; komponen ini tidak
+// memakai useParams karena hook itu tidak pernah resolve saat hard load pada
+// rute PPR — halaman akan tersangkut di fallback. Sumber data: getOrderById
+// dari store lokal, menyegarkan lewat event `craftai:recent-changed`. Tidak
+// ada fetch API — brief asli, draft, kuota, log, dan statistik semuanya dari
+// baris order yang sama.
 
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminShell from '@/components/admin/AdminShell';
 import JsonBlock from '@/components/admin/JsonBlock';
 import PosterEditor from '@/components/admin/PosterEditor';
@@ -13,33 +17,23 @@ import StatusBadge from '@/components/admin/StatusBadge';
 import StatusUpdateForm from '@/components/admin/StatusUpdateForm';
 import DeliveryForm from '@/components/admin/DeliveryForm';
 import LogsTimeline from '@/components/admin/LogsTimeline';
-import SessionExpired from '@/components/admin/SessionExpired';
 import { Skeleton } from '@/components/ui/Feedback';
-import { API_BASE } from '@/lib/api';
+import {
+  RECENT_EVENT,
+  ensureDemoOrder,
+  getOrderById,
+  remainingOf,
+  type StoredOrder,
+} from '@/lib/orders-store';
+import { paymentLabelOf, toAdminOrder } from './local-orders';
 import {
   COLUMN_META,
   columnOfStatus,
   formatDate,
   formatRupiah,
-  positiveInt,
-  quotaOf,
-  type AdminDraft,
   type AdminOrder,
   type DraftBrief,
-  type OrderLog,
-  type QuotaInfo,
-} from '@/components/admin/types';
-
-// GET /api/orders/[id] -> {order, draft, drafts, logs, remaining}
-// (docs/REDESIGN.md §5). `drafts`/`remaining` opsional supaya halaman tetap
-// terbaca saat backend lama yang belum mengirimnya sedang berjalan.
-interface OrderPayload {
-  order: AdminOrder;
-  draft: AdminDraft | null;
-  drafts?: AdminDraft[];
-  logs: OrderLog[];
-  remaining?: number | null;
-}
+} from './types';
 
 /** Label untuk baris brief; nilai kosong tetap terlihat sebagai '-'. */
 const BRIEF_ROWS = [
@@ -56,8 +50,8 @@ function BriefLedger({ brief }: { brief: DraftBrief | null }) {
   if (!brief) {
     return (
       <p className="px-3 py-4 text-[11.5px] leading-relaxed text-ink-soft">
-        Brief tidak tersimpan untuk order ini. Minta customer mengisi ulang brief di halaman
-        kustomisasi.
+        Brief tidak tersimpan untuk order ini (tampil &apos;-&apos;). Minta customer mengisi ulang brief di
+        halaman kustomisasi.
       </p>
     );
   }
@@ -98,83 +92,55 @@ function DetailSkeleton() {
         <Skeleton className="h-64" />
       </div>
       <p className="font-mono text-[10px] tracking-[0.14em] text-ink-soft uppercase">
-        Mengambil order, brief, dan riwayat…
+        Membaca order dari penyimpanan lokal…
       </p>
     </div>
   );
 }
 
-
 export default function AdminOrderDetail({ orderId }: { orderId: string }) {
-  const [data, setData] = useState<OrderPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [expired, setExpired] = useState(false);
-  // Draft yang sedang ditampilkan di pratinjau & JSON. Bila id tidak ditemukan
-  // lagi (mis. setelah muat ulang), otomatis jatuh ke draft utama — tanpa effect.
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [order, setOrder] = useState<StoredOrder | null>(null);
   // loading hanya untuk muat pertama. Memuat ulang setelah simpan membiarkan
   // halaman tetap terlihat, karena menggantinya dengan skeleton akan melepas
   // mount form dan menghapus pesan hasil simpan.
   const [loading, setLoading] = useState(true);
+  // Draft yang sedang ditampilkan di pratinjau & JSON. Bila id tidak ditemukan
+  // lagi (mis. setelah muat ulang), otomatis jatuh ke draft utama — tanpa effect.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    // Semua set-state diundur: effect memanggil fungsi ini langsung, jadi
-    // state yang diset sinkron di awal akan memicu render berantai.
-    queueMicrotask(() => setError(null));
-
-    let nextData: OrderPayload | null = null;
-    let nextError: string | null = null;
-    let nextExpired = false;
-
-    try {
-      const response = await fetch(`${API_BASE}/api/orders/${orderId}`, { cache: 'no-store', credentials: 'include' });
-      if (response.status === 401) {
-        nextExpired = true;
-      } else {
-        const payload = (await response.json().catch(() => null)) as
-          | (OrderPayload & { error?: string })
-          | null;
-        if (!response.ok) {
-          nextError = payload?.error ?? `Order tidak ditemukan (HTTP ${response.status})`;
-        } else if (!payload?.order) {
-          nextError = 'Respons API tidak berisi field order.';
-        } else {
-          nextData = {
-            order: payload.order,
-            draft: payload.draft ?? null,
-            drafts: Array.isArray(payload.drafts) ? payload.drafts : undefined,
-            logs: payload.logs ?? [],
-            remaining: payload.remaining ?? null,
-          };
-        }
-      }
-    } catch {
-      nextError = 'Tidak bisa menghubungi server. Periksa koneksi lalu coba lagi.';
-    }
-
-    // Setelah await saja: menyetel state secara sinkron di dalam effect
-    // memicu render berantai (lint react-hooks/set-state-in-effect).
-    queueMicrotask(() => {
-      if (nextData) setData(nextData);
-      setError(nextError);
-      setExpired(nextExpired);
-      setLoading(false);
-    });
+  const load = useCallback(() => {
+    setOrder(getOrderById(orderId));
   }, [orderId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let alive = true;
 
-  // Form status/delivery memberi tahu halaman ini lewat event agar data segar
-  // tanpa memicu navigasi ulang.
-  useEffect(() => {
-    function onUpdated() {
-      void load();
-    }
-    window.addEventListener('admin:order-updated', onUpdated);
-    return () => window.removeEventListener('admin:order-updated', onUpdated);
-  }, [load]);
+    // Seed demo + pembacaan awal lewat microtask: setState yang diset sinkron
+    // di dalam effect memicu render berantai (lint react-hooks/set-state-in-effect).
+    // Hard load langsung ke /admin/orders/<id> juga benarkan order demo supaya
+    // penyimpanan yang masih kosong tetap punya UK-ORD-8812.
+    queueMicrotask(() => {
+      if (!alive) return;
+      ensureDemoOrder();
+      setOrder(getOrderById(orderId));
+      setLoading(false);
+    });
+
+    // Simpan status/poster/delivery di mana pun menyebar RECENT_EVENT dari
+    // store — detail ikut menyegarkan tanpa navigasi.
+    const onRecent = () => {
+      if (alive) load();
+    };
+    window.addEventListener(RECENT_EVENT, onRecent);
+    return () => {
+      alive = false;
+      window.removeEventListener(RECENT_EVENT, onRecent);
+    };
+  }, [load, orderId]);
+
+  // Identitas AdminOrder dipertahankan selama order belum berubah supaya form
+  // tidak me-reset dirinya setiap halaman me-render ulang (mis. ganti draft).
+  const adminOrder = useMemo<AdminOrder | null>(() => (order ? toAdminOrder(order) : null), [order]);
 
   if (loading) {
     return (
@@ -184,7 +150,7 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
     );
   }
 
-  if (expired) {
+  if (!order || !adminOrder) {
     return (
       <AdminShell>
         <nav aria-label="Remah roti" className="mb-3">
@@ -195,34 +161,23 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
             ← Papan
           </Link>
         </nav>
-        <div className="max-w-[60ch]">
-          <SessionExpired
-            from={`/admin/orders/${orderId}`}
-            detail="Detail order tidak bisa dimuat karena cookie admin sudah tidak berlaku. Data order tetap aman."
-          />
-        </div>
-      </AdminShell>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <AdminShell>
         <div role="alert" className="max-w-[60ch] border-[1.5px] border-danger bg-surface">
           <div className="border-b border-rule px-4 py-2.5">
             <p className="font-mono text-[10px] tracking-[0.14em] text-danger uppercase">
               Berkas tidak terbaca
             </p>
-            <h1 className="mt-1 text-lg leading-tight font-semibold text-ink">Order gagal dimuat</h1>
+            <h1 className="mt-1 text-lg leading-tight font-semibold text-ink">
+              Order tidak ditemukan
+            </h1>
           </div>
           <p className="px-4 py-3 text-[12.5px] leading-relaxed text-ink-soft">
-            {error ?? 'Data order tidak tersedia.'} Periksa sesi admin Anda, lalu muat ulang. Data
-            order tidak berubah.
+            Order dengan id ini tidak ada di penyimpanan lokal browser. Order hanya tersimpan per
+            perangkat — pesanan dari browser lain tidak akan muncul di sini.
           </p>
           <div className="flex flex-wrap gap-2 border-t border-rule px-4 py-3">
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={load}
               className="min-h-11 border border-ink bg-ink px-3.5 text-[11.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               Coba lagi
@@ -239,23 +194,25 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
     );
   }
 
-  const { order, draft, logs } = data;
-  // Semua draft milik order (termasuk brief tambahan). `drafts` dari API menang;
-  // bila belum dikirim, jatuh ke draft tunggal agar halaman tetap lengkap.
-  const drafts = data.drafts && data.drafts.length > 0 ? data.drafts : draft ? [draft] : [];
-  const primary = draft ?? drafts[0] ?? null;
+  // Semua draft milik order (konten poster + brief tambahan dari kuota paket).
+  const drafts = order.drafts;
+  const primary = drafts[0] ?? null;
   const selected = drafts.find((item) => item.id === selectedId) ?? primary;
-  const brief = primary?.input_prompt_data ?? null;
+  // Brief asli customer selalu dari order.brief (bukan dari draft).
+  const brief = order.brief ?? null;
   const content = selected?.ai_generated_content ?? null;
+
+  // Sisa kuota dihitung dari kuota paket dikurangi draft yang sudah dibuat.
+  const remaining = remainingOf(order);
+  const quotaValue = typeof order.quota === 'number' && order.quota > 0 ? order.quota : null;
+  const column = columnOfStatus(order.status);
+  const paymentLabel = paymentLabelOf(order.payment_status);
+  const paymentPaid = paymentLabel === 'Lunas';
 
   // Tautan Chat ke Customer: wa.me ke contact_whatsapp order dengan pesan
   // pembuka berisi nomor order. Tanpa nomor, tombol tidak dirender.
   const digits = (order.contact_whatsapp ?? '').replace(/[^0-9]/g, '');
   const customerGreeting = `Halo ${order.contact_name || 'kak'}, saya dari Aether Creative ingin menanyakan pesanan ${order.order_number}.`;
-
-  const quotaBase = quotaOf(order, drafts.length);
-  const quotaInfo: QuotaInfo = { ...quotaBase, remaining: positiveInt(data.remaining) ?? quotaBase.remaining };
-  const column = columnOfStatus(order.status);
 
   return (
     <AdminShell>
@@ -302,13 +259,9 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
                 |
               </span>
               <span
-                className={
-                  order.payment_status === 'paid'
-                    ? 'font-semibold text-ok'
-                    : 'font-semibold text-warn'
-                }
+                className={paymentPaid ? 'font-semibold text-ok' : 'font-semibold text-warn'}
               >
-                {order.payment_status === 'paid' ? 'Lunas' : 'Belum dibayar'}
+                {paymentLabel}
               </span>
             </p>
           </div>
@@ -353,22 +306,11 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
                 Sisa kuota
               </dt>
               <dd
-                className={`mt-0.5 font-semibold ${
-                  quotaInfo.remaining === null
-                    ? 'text-ink-soft'
-                    : quotaInfo.remaining > 0
-                      ? 'text-ok'
-                      : 'text-danger'
-                }`}
-                title={
-                  quotaInfo.remaining === null
-                    ? 'Backend belum mengirim data kuota order ini.'
-                    : `Kuota paket ${quotaInfo.quota ?? '?'}, sudah dipakai ${drafts.length}`
-                }
+                className={`mt-0.5 font-semibold ${remaining > 0 ? 'text-ok' : 'text-danger'}`}
+                title={`Kuota paket ${quotaValue ?? '?'}, sudah dipakai ${drafts.length}`}
               >
-                {quotaInfo.remaining !== null
-                  ? `${quotaInfo.remaining}${quotaInfo.quota !== null ? ` / ${quotaInfo.quota}` : ''}`
-                  : '—'}
+                {remaining}
+                {quotaValue !== null ? ` / ${quotaValue}` : ''}
               </dd>
             </div>
             <div className="min-w-0">
@@ -426,7 +368,7 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
       </header>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        {/* Brief customer: ledger dua kolom, label mono. */}
+        {/* Brief asli customer: ledger dua kolom, label mono. */}
         <section aria-labelledby="brief-customer" className="min-w-0 border border-rule bg-surface">
           <div className="flex items-baseline justify-between gap-2 border-b border-rule px-3 py-2">
             <h2 id="brief-customer" className="text-xs font-semibold tracking-tight text-ink">
@@ -442,20 +384,20 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
           {drafts.length > 1 ? (
             <p className="border-t border-rule px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
               Order ini punya {drafts.length} draft — {drafts.length - 1} di antaranya berasal dari
-              brief tambahan. Pilih draft di daftar untuk melihat brief lainnya.
+              brief tambahan. Pilih draft di daftar untuk melihat konten lainnya.
             </p>
           ) : null}
         </section>
 
         {/* Editor Konten Poster: satu-satunya tempat isi poster diubah. AI sudah
-            ditarik dari alur — kolom disusun manual dan disimpan lewat
-            PUT /api/admin/orders/[id]/poster. */}
+            ditarik dari alur — kolom disusun manual dan disimpan ke store lokal
+            lewat savePoster (draft engine 'manual' + log). */}
         <section aria-labelledby="editor-poster" className="min-w-0">
           <PosterEditor
             orderId={orderId}
             content={content}
             brief={brief}
-            exportHref={selected ? `${API_BASE}/api/export/${selected.id}` : null}
+            contactName={order.contact_name}
           />
         </section>
       </div>
@@ -470,16 +412,15 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
             </span>
           </h2>
           <p className="font-mono text-[10px] tracking-[0.14em] text-ink-soft uppercase">
-            {drafts.length} draft · sisa kuota{' '}
-            {quotaInfo.remaining !== null ? quotaInfo.remaining : '—'}
-            {quotaInfo.quota !== null ? `/${quotaInfo.quota}` : ''}
+            {drafts.length} draft · sisa kuota {remaining}
+            {quotaValue !== null ? `/${quotaValue}` : ''}
           </p>
         </div>
 
         {drafts.length === 0 ? (
           <p className="px-3 py-4 text-[11.5px] leading-relaxed text-ink-soft">
-            Belum ada draft terhubung ke order ini. Brief tambahan dari customer akan langsung
-            muncul di daftar ini.
+            Belum ada draft terhubung ke order ini. Simpan konten di editor di atas atau brief
+            tambahan dari customer akan langsung muncul di daftar ini.
           </p>
         ) : (
           <ul className="divide-y divide-rule">
@@ -501,39 +442,30 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
                         </button>
                         <span
                           className={`border-[1.5px] px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.1em] uppercase ${
-                            index === 0 ? 'border-rule text-ink-soft' : 'border-warn text-warn'
+                            item.engine === 'manual' ? 'border-ok text-ok' : 'border-rule text-ink-soft'
                           }`}
                         >
-                          {index === 0 ? 'Brief awal' : 'Brief tambahan'}
+                          {item.engine === 'manual' ? 'Editor manual' : 'Brief awal'}
                         </span>
                         <time
-                          dateTime={item.generated_at}
+                          dateTime={item.generated_at ?? undefined}
                           className="font-mono text-[10px] tabular-nums text-ink-soft"
                         >
-                          {formatDate(item.generated_at)}
+                          {formatDate(item.generated_at ?? null)}
                         </time>
                       </div>
                       <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft">
                         <span className="font-semibold text-ink">
-                          {itemBrief?.brandName || 'Tanpa nama brand'}
+                          {itemBrief?.brandName || brief?.brandName || 'Tanpa nama brand'}
                         </span>
                         {itemBrief?.tagline ? ` — ${itemBrief.tagline}` : ''}
                       </p>
                       <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10.5px] text-ink-soft">
-                        <span>tema {itemBrief?.themeColor ?? '—'}</span>
-                        <span>cta {itemBrief?.ctaText || '—'}</span>
+                        <span>tema {itemBrief?.themeColor ?? brief?.themeColor ?? '—'}</span>
+                        <span>cta {itemBrief?.ctaText || brief?.ctaText || '—'}</span>
                         <span className="truncate">{item.id.slice(0, 8)}</span>
                       </p>
                     </div>
-
-                    <a
-                      href={`${API_BASE}/api/export/${item.id}`}
-                      download
-                      aria-label={`Export Clean Source Code untuk draft ${index + 1}`}
-                      className="flex min-h-11 shrink-0 items-center justify-center border border-rule px-3 text-[11.5px] font-medium text-ink transition hover:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:self-start"
-                    >
-                      Export ↓
-                    </a>
                   </div>
                 </li>
               );
@@ -543,24 +475,24 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
       </section>
 
       {/* Payload mentah selalu tersedia: admin butuh melihat persis apa yang
-          dikembalikan API, termasuk saat konten poster belum pernah diedit. */}
+          tersimpan, termasuk saat konten poster belum pernah diedit. */}
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <JsonBlock
-          value={content ?? { order, draft: null }}
-          label={content ? 'Payload JSON konten poster' : 'Payload API order (konten belum ada)'}
+          value={content ?? adminOrder}
+          label={content ? 'Payload JSON konten poster' : 'Data order lokal (konten belum ada)'}
         />
-        {selected?.input_prompt_data ? (
-          <JsonBlock value={selected.input_prompt_data} label="Brief input (input_prompt_data)" />
+        {brief ? (
+          <JsonBlock value={brief} label="Brief asli customer (order.brief)" />
         ) : null}
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <StatusUpdateForm order={order} />
-        <DeliveryForm order={order} />
+        <StatusUpdateForm order={adminOrder} />
+        <DeliveryForm order={adminOrder} />
       </div>
 
       <div className="mt-3">
-        <LogsTimeline logs={logs} />
+        <LogsTimeline logs={order.logs} />
       </div>
     </AdminShell>
   );

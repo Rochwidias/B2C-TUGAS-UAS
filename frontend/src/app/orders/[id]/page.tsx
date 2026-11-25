@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { OrderDetailClient } from '@/components/shop/OrderDetailClient';
 
-// Judul dinamis mengikuti nomor order bila diketahui; shell server ini memberi
-// metadata dasar, sedangkan isi (data order) diambil di klien via /api/orders/:id.
+// Shell server ini memberi metadata dasar, sedangkan data order dimuat klien
+// dari store lokal (frontend-only, docs/FRONTEND-ONLY.md).
 export const metadata: Metadata = {
   title: 'Detail Pesanan',
   description:

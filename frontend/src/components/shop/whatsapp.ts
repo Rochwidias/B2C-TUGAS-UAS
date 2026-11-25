@@ -1,22 +1,19 @@
 'use client';
 
-// Sumber tunggal nomor WhatsApp resmi = GET /api/contact (env WHATSAPP_NUMBER,
-// docs/WHATSAPP-FLOW.md §Baru). Hasilnya di-cache di modul karena nilai yang
-// dikirim server jarang berubah dan beberapa halaman memakainya berulang.
+// Sumber tunggal nomor WhatsApp resmi (docs/FRONTEND-ONLY.md): env
+// NEXT_PUBLIC_WHATSAPP_NUMBER dengan placeholder bawaan. Statis — tidak ada
+// fetch; hook dan helper dipertahankan agar pemakai tidak banyak berubah.
 
-import { useEffect, useState } from 'react';
-import { API_BASE } from '@/lib/api';
 import type { ContactInfo } from './types';
 
-let cached: ContactInfo | null | undefined;
-let inflight: Promise<ContactInfo | null> | null = null;
+/** Nomor WhatsApp resmi studio: env publik, dengan nilai contoh bila kosong. */
+export const WHATSAPP_NUMBER =
+  process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '6281234567890';
 
-/** Kontak WhatsApp cadangan (demo/simulasi) bila GET /api/contact tidak tersedia.
- *  Nomor dan tautan wa.me bersifat contoh; footer mencatat bahwa demo ini simulasi.
- */
-export const FALLBACK_CONTACT: ContactInfo = {
-  whatsappNumber: '6281234567890',
-  whatsappUrl: 'https://wa.me/6281234567890',
+/** Kontak WhatsApp resmi — konstanta statis, sama bentuknya dengan respons lama. */
+export const CONTACT: ContactInfo = {
+  whatsappNumber: WHATSAPP_NUMBER,
+  whatsappUrl: `https://wa.me/${WHATSAPP_NUMBER}`,
   whatsappSupportUrl: null,
 };
 
@@ -34,46 +31,9 @@ export function withText(url: string, text: string): string {
   }
 }
 
-/** Ambil kontak resmi; cadangan simulasi bila endpoint belum ada atau jaringan gagal. */
-export async function fetchContact(): Promise<ContactInfo | null> {
-  if (cached) return cached;
-  if (inflight) return inflight;
-
-  inflight = (async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/contact`, { cache: 'no-store' });
-      if (!res.ok) return FALLBACK_CONTACT;
-      const body = (await res.json().catch(() => null)) as
-        | (ContactInfo & { data?: ContactInfo })
-        | null;
-      const info = body?.data ?? body ?? null;
-      if (!info || typeof info.whatsappUrl !== 'string' || !info.whatsappUrl.trim()) return FALLBACK_CONTACT;
-      cached = info;
-      return info;
-    } catch {
-      return FALLBACK_CONTACT;
-    } finally {
-      inflight = null;
-    }
-  })();
-
-  return inflight;
-}
-
-export function useContact(): ContactInfo | null {
-  const [contact, setContact] = useState<ContactInfo | null>(() => cached ?? null);
-
-  useEffect(() => {
-    let alive = true;
-    void fetchContact().then((info) => {
-      if (alive) setContact(info);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return contact;
+/** Kontak resmi: tetap berupa hook supaya pemakai lama tidak banyak berubah. */
+export function useContact(): ContactInfo {
+  return CONTACT;
 }
 
 /**

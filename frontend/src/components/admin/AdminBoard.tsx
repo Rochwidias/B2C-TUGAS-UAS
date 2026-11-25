@@ -1,11 +1,24 @@
 'use client';
 
+// Papan pesanan versi frontend-only (docs/FRONTEND-ONLY.md): satu-satunya
+// sumber data adalah store lokal `src/lib/orders-store.ts` (localStorage
+// `aether-orders`). Order yang dibuat customer di browser yang sama langsung
+// muncul di sini lewat event `craftai:recent-changed` + event `storage`
+// antar-tab. Statistik dihitung lokal di ./local-orders — tidak ada fetch API.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import KanbanBoard from './KanbanBoard';
 import StatsRow, { StatusDistribution } from './StatsRow';
 import OrderFilterBar from './OrderFilterBar';
-import SessionExpired from './SessionExpired';
 import { Skeleton } from '@/components/ui/Feedback';
+import {
+  ORDER_STORE_KEY,
+  RECENT_EVENT,
+  ensureDemoOrder,
+  listOrders,
+  type StoredOrder,
+} from '@/lib/orders-store';
+import { buildColumns, buildStats } from './local-orders';
 import {
   COLUMN_ORDER,
   type AdminOrder,
@@ -13,7 +26,6 @@ import {
   type KanbanColumns,
   type StatusFilter,
 } from './types';
-import { API_BASE } from '@/lib/api';
 
 function emptyColumns(): KanbanColumns {
   return { backlog: [], in_progress: [], review: [], completed: [] };
@@ -44,101 +56,64 @@ function matchesQuery(order: AdminOrder, needle: string): boolean {
   return haystack.includes(needle);
 }
 
-// Mengambil papan + statistik dari API admin dan menanganinya sebagai state
-// klien supaya status pindah kartu bisa me-refresh tanpa navigasi server.
 export default function AdminBoard() {
-  const [columns, setColumns] = useState<KanbanColumns | null>(null);
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [expired, setExpired] = useState(false);
+  // null = belum pernah dibaca; [] = penyimpanan memang kosong.
+  const [orders, setOrders] = useState<StoredOrder[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
 
-  const load = useCallback(async () => {
-    // Semua set-state diundur: effect memanggil fungsi ini langsung, jadi
-    // state yang diset sinkron di awal akan memicu render berantai.
-    queueMicrotask(() => {
-      setLoading(true);
-      setError(null);
-    });
-    try {
-      const [ordersResponse, statsResponse] = await Promise.all([
-        fetch(`${API_BASE}/api/admin/orders`, { cache: 'no-store', credentials: 'include' }),
-        fetch(`${API_BASE}/api/admin/stats`, { cache: 'no-store', credentials: 'include' }).catch(() => null),
-      ]);
-
-      if (ordersResponse.status === 401) {
-        queueMicrotask(() => {
-          setColumns(emptyColumns());
-          setExpired(true);
-        });
-        return;
-      }
-
-      const payload = (await ordersResponse.json().catch(() => null)) as {
-        columns?: Partial<KanbanColumns>;
-        error?: string;
-      } | null;
-      if (!ordersResponse.ok) {
-        throw new Error(payload?.error ?? `Gagal memuat papan (HTTP ${ordersResponse.status})`);
-      }
-      if (!payload?.columns) {
-        throw new Error('Respons /api/admin/orders tidak berisi field columns.');
-      }
-
-      // Statistik yang gagal tidak menjatuhkan papan: baris angka punya keadaan
-      // sendiri, sedangkan papan tetap harus bisa dipakai.
-      let nextStats: AdminStats | null = null;
-      if (statsResponse?.ok) {
-        const statsPayload = (await statsResponse.json().catch(() => null)) as AdminStats | null;
-        nextStats = statsPayload ?? null;
-      }
-
-      // Setelah await saja: menyetel state secara sinkron di dalam effect
-      // memicu render berantai (lint react-hooks/set-state-in-effect).
-      queueMicrotask(() => {
-        setColumns({ ...emptyColumns(), ...payload.columns });
-        setStats(nextStats);
-        setExpired(false);
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan tak terduga.';
-      queueMicrotask(() => {
-        setColumns(emptyColumns());
-        setError(message);
-      });
-    } finally {
-      queueMicrotask(() => setLoading(false));
-    }
+  const refresh = useCallback(() => {
+    setOrders(listOrders());
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let alive = true;
 
-  const handleMoved = useCallback(() => {
-    void load();
-  }, [load]);
+    // Seed demo + pembacaan awal lewat microtask: setState yang diset sinkron
+    // di dalam effect memicu render berantai (lint react-hooks/set-state-in-effect).
+    queueMicrotask(() => {
+      if (!alive) return;
+      ensureDemoOrder();
+      refresh();
+      setLoading(false);
+    });
+
+    // Perubahan apa pun (kartu pindah, poster disimpan, order baru dari shop)
+    // menyebar lewat event store; `storage` mengCover tab lain.
+    const onRecent = () => {
+      if (alive) refresh();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (alive && (event.key === null || event.key === ORDER_STORE_KEY)) refresh();
+    };
+    window.addEventListener(RECENT_EVENT, onRecent);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      alive = false;
+      window.removeEventListener(RECENT_EVENT, onRecent);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [refresh]);
+
+  const columns = useMemo<KanbanColumns>(() => buildColumns(orders ?? []), [orders]);
+  const stats = useMemo<AdminStats | null>(() => (orders ? buildStats(orders) : null), [orders]);
 
   // Filter sisi klien: satu sumber kebenaran untuk papan dan hitungan kolom.
   // `status` memilih satu kolom saja; pencarian menyaring di dalamnya.
   const visible = useMemo<KanbanColumns>(() => {
     const needle = query.trim().toLocaleLowerCase('id-ID');
-    const base = columns ?? emptyColumns();
     const result = emptyColumns();
     for (const key of COLUMN_ORDER) {
       const inScope = status === 'all' || status === key;
       result[key] = inScope
-        ? (base[key] ?? []).filter((order) => matchesQuery(order, needle))
+        ? (columns[key] ?? []).filter((order) => matchesQuery(order, needle))
         : [];
     }
     return result;
   }, [columns, query, status]);
 
-  const totalAll = columns
-    ? COLUMN_ORDER.reduce((sum, key) => sum + (columns[key]?.length ?? 0), 0)
-    : 0;
+  const totalAll = COLUMN_ORDER.reduce((sum, key) => sum + (columns[key]?.length ?? 0), 0);
   const matchCount = COLUMN_ORDER.reduce((sum, key) => sum + visible[key].length, 0);
   const filtering = query.trim() !== '' || status !== 'all';
   const openVisible = COLUMN_ORDER.filter((key) => key !== 'completed').reduce(
@@ -158,8 +133,8 @@ export default function AdminBoard() {
           </h1>
           <p className="mt-1.5 max-w-[62ch] text-[12px] leading-relaxed text-ink-soft">
             Pindahkan kartu antar kolom lewat dropdown di kartu. Tiap kartu menampilkan paket dan
-            sisa kuota poster; setiap perubahan tercatat di riwayat order dan langsung terlihat
-            customer.
+            sisa kuota poster; setiap perubahan tersimpan di penyimpanan lokal browser dan langsung
+            terlihat customer di tab yang sama.
           </p>
         </div>
 
@@ -185,7 +160,7 @@ export default function AdminBoard() {
           </dl>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={refresh}
             disabled={loading}
             className="min-h-11 border border-ink bg-paper px-3 text-[11.5px] font-semibold text-ink transition hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:border-rule disabled:bg-transparent disabled:text-ink-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
@@ -202,8 +177,8 @@ export default function AdminBoard() {
           <StatsRow
             stats={stats}
             loading={loading && !stats}
-            error={error}
-            onRetry={() => void load()}
+            error={null}
+            onRetry={refresh}
           />
           <div className="hidden lg:block">
             {stats ? (
@@ -239,54 +214,21 @@ export default function AdminBoard() {
         />
       </div>
 
-      {expired ? (
-        <div className="mt-3">
-          <SessionExpired
-            from="/admin"
-            detail="Daftar order tidak bisa dimuat karena cookie admin sudah tidak berlaku."
-          />
-        </div>
-      ) : null}
-
-      {loading && !columns ? (
+      {loading && orders === null ? (
         <div className="mt-4" aria-busy="true">
           <p className="mb-2 font-mono text-[10px] tracking-wide text-ink-soft uppercase">
-            Mengambil daftar order…
+            Membaca penyimpanan lokal…
           </p>
           {skeletonBoard()}
         </div>
       ) : null}
 
-      {!loading && !expired && error ? (
-        <div role="alert" className="mt-4 border-[1.5px] border-danger bg-surface p-4">
-          <h2 className="text-sm font-semibold text-danger">Papan gagal dimuat</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
-            {error} Periksa sesi admin Anda lalu muat ulang. Data order tidak berubah.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="min-h-11 border border-ink bg-ink px-3.5 text-[11.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              Coba lagi
-            </button>
-            <a
-              href="/admin/login"
-              className="flex min-h-11 items-center border border-rule px-3.5 text-[11.5px] font-medium text-ink transition hover:border-ink"
-            >
-              Masuk ulang
-            </a>
-          </div>
-        </div>
-      ) : null}
-
-      {!loading && !expired && !error && columns ? (
+      {!loading && orders !== null ? (
         <div className="mt-4">
           <KanbanBoard
             columns={visible}
             filtered={filtering}
-            onMoved={handleMoved}
+            onMoved={refresh}
             keys={status === 'all' ? COLUMN_ORDER : [status]}
           />
           {status !== 'all' ? (

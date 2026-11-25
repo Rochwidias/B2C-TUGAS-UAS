@@ -1,10 +1,8 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import SessionExpired from './SessionExpired';
-import { Spinner } from '@/components/ui/Feedback';
 import { useToast } from '@/components/ui/Toast';
-import { API_BASE } from '@/lib/api';
+import { setStatus } from '@/lib/orders-store';
 import {
   ALL_STATUSES,
   STATUS_LABEL,
@@ -12,70 +10,49 @@ import {
   type OrderStatus,
 } from './types';
 
-// Form update status + catatan developer -> PATCH /api/orders/[id].
-// Sukses dikomunikasikan lewat event agar halaman induk bisa me-refresh data
-// tanpa memuat ulang seluruh dokumen, plus toast agar umpan baliknya terbaca
-// walau tombol berada di luar viewport.
+// Form update status + catatan developer -> setStatus dari store lokal.
+// Store menulis entri log dan menyebar event `craftai:recent-changed`, sehingga
+// halaman induk (yang memantau event itu) menyegarkan data tanpa navigasi,
+// plus toast agar umpan baliknya terbaca walau tombol di luar viewport.
 export default function StatusUpdateForm({ order }: { order: AdminOrder }) {
   const toast = useToast();
-  const [status, setStatus] = useState<OrderStatus>(order.status);
-  const [note, setNote] = useState(order.dev_note ?? '');
-  const [busy, setBusy] = useState(false);
+  const [status, setStatusValue] = useState<OrderStatus>(order.status);
+  const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
-  const [expired, setExpired] = useState(false);
-  const unchanged = status === order.status && note === (order.dev_note ?? '');
+  const unchanged = status === order.status && note.trim() === '';
 
-  // Sinkronkan dengan data terbaru dari server setiap kali halaman me-refresh,
-  // tanpa me-mount ulang form sehingga pesan sukses tetap terbaca. Disesuaikan
-  // saat render, bukan di effect, agar tidak memicu render berantai.
+  // Ikuti nilai terbaru dari store setiap kali halaman me-refresh (mis. setelah
+  // simpan poster/delivery), tanpa me-mount ulang form sehingga pesan sukses
+  // tetap terbaca. Disesuaikan saat render, bukan di effect, agar tidak memicu
+  // render berantai.
   const [prevOrder, setPrevOrder] = useState(order);
   if (order !== prevOrder) {
     setPrevOrder(order);
-    setStatus(order.status);
-    setNote(order.dev_note ?? '');
+    setStatusValue(order.status);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (unchanged) {
       setError('Tidak ada perubahan untuk disimpan.');
       return;
     }
-    setBusy(true);
     setError(null);
     setSaved(null);
-    setExpired(false);
-    try {
-      const response = await fetch(`${API_BASE}/api/orders/${order.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status, devNote: note }),
-              credentials: 'include',
-            });
-      const payload = (await response.json().catch(() => null)) as {
-        error?: string;
-        order?: AdminOrder;
-      } | null;
-      if (response.status === 401) {
-        setExpired(true);
-        toast.error('Sesi berakhir, silakan login ulang', 'Perubahan tidak disimpan.');
-        return;
-      }
-      if (!response.ok) {
-        throw new Error(payload?.error ?? `Gagal menyimpan (HTTP ${response.status})`);
-      }
-      const detail = `Status ${STATUS_LABEL[payload?.order?.status ?? status]} tersimpan.`;
-      setSaved(detail);
-      toast.success('Perubahan tersimpan', detail);
-      window.dispatchEvent(new CustomEvent('admin:order-updated', { detail: payload?.order }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan tak terduga.';
+
+    const updated = setStatus(order.id, status, note.trim() || null);
+    if (!updated) {
+      const message = 'Order tidak ditemukan di penyimpanan lokal.';
       setError(message);
       toast.error('Gagal menyimpan perubahan', message);
-    } finally {
-      setBusy(false);
+      return;
     }
+
+    const detail = `Status ${STATUS_LABEL[updated.status]} tersimpan.`;
+    setSaved(detail);
+    toast.success('Perubahan tersimpan', detail);
+    // Event RECENT_EVENT dari store memicu pembaruan halaman induk.
   }
 
   return (
@@ -88,8 +65,8 @@ export default function StatusUpdateForm({ order }: { order: AdminOrder }) {
       </div>
 
       <p className="border-b border-rule px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
-        Setiap perubahan ditulis ke <code className="font-mono text-ink">order_logs</code> dan langsung
-        terlihat customer di halaman pelacakan.
+        Setiap perubahan ditulis ke riwayat log order di penyimpanan lokal dan langsung terlihat
+        customer di halaman pelacakan.
       </p>
 
       <div className="grid gap-3 px-3 py-3">
@@ -104,11 +81,10 @@ export default function StatusUpdateForm({ order }: { order: AdminOrder }) {
             id="dev-status"
             value={status}
             onChange={(event) => {
-              setStatus(event.target.value as OrderStatus);
+              setStatusValue(event.target.value as OrderStatus);
               setSaved(null);
             }}
-            disabled={busy}
-            className="min-h-11 w-full border border-rule bg-paper px-2.5 text-[13px] text-ink transition focus:border-ink disabled:opacity-60"
+            className="min-h-11 w-full border border-rule bg-paper px-2.5 text-[13px] text-ink transition focus:border-ink"
           >
             {ALL_STATUSES.map((item) => (
               <option key={item} value={item}>
@@ -140,13 +116,11 @@ export default function StatusUpdateForm({ order }: { order: AdminOrder }) {
             onChange={(event) => {
               setNote(event.target.value);
               setSaved(null);
-              setExpired(false);
             }}
             rows={4}
-            disabled={busy}
             maxLength={2000}
             placeholder="Contoh: revisi headline poster sudah diterapkan, tinggal dikirim ke customer."
-            className="w-full resize-y border border-rule bg-paper px-2.5 py-2 text-[12.5px] leading-relaxed text-ink placeholder:text-ink-soft/80 transition focus:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+            className="w-full resize-y border border-rule bg-paper px-2.5 py-2 text-[12.5px] leading-relaxed text-ink placeholder:text-ink-soft/80 transition focus:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           />
         </div>
       </div>
@@ -154,30 +128,22 @@ export default function StatusUpdateForm({ order }: { order: AdminOrder }) {
       <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-rule px-3 py-2.5">
         <button
           type="submit"
-          disabled={busy || unchanged}
-          aria-busy={busy}
+          disabled={unchanged}
           className="flex min-h-11 items-center justify-center gap-2 border border-ink bg-ink px-3.5 text-[11.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent disabled:cursor-not-allowed disabled:border-rule disabled:bg-transparent disabled:text-ink-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          {busy ? <Spinner /> : null}
-          {busy ? 'Menyimpan…' : 'Simpan perubahan'}
+          Simpan perubahan
         </button>
-        {saved && !expired ? (
+        {saved ? (
           <p role="status" className="text-[11px] font-medium text-ok">
             {saved}
           </p>
         ) : null}
-        {error && !expired ? (
+        {error ? (
           <p role="alert" className="text-[11px] font-medium text-danger">
             {error}
           </p>
         ) : null}
       </div>
-
-      {expired ? (
-        <div className="border-t border-rule p-3">
-          <SessionExpired from={`/admin/orders/${order.id}`} compact />
-        </div>
-      ) : null}
     </form>
   );
 }

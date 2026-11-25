@@ -1,11 +1,13 @@
 'use client';
 
-// Tombol "Lanjutkan pesanan terakhir" di /orders. Membaca nomor order yang
-// disimpan CustomizerClient setelah checkout (localStorage 'craftai-last-order').
+// Tombol "Lanjutkan pesanan terakhir" di /orders. Membaca pintasan yang
+// disimpan store (setLastOrder) setelah checkout di customizer — key
+// LAST_ORDER_KEY ('craftai-last-order'), pembaruan lewat LAST_ORDER_EVENT.
 // Tidak menampilkan apa pun bila belum pernah checkout di perangkat ini.
 
 import { useSyncExternalStore } from 'react';
 import { WhatsAppChat } from '@/components/shop/WhatsAppChat';
+import { LAST_ORDER_EVENT, LAST_ORDER_KEY } from '@/lib/orders-store';
 
 interface LastOrder {
   number: string;
@@ -15,8 +17,6 @@ interface LastOrder {
   status?: string;
 }
 
-const KEY = 'craftai-last-order';
-
 // useSyncExternalStore: server mengirim snapshot "kosong" yang sama dengan
 // render pertama klien, jadi HTML server dan klien cocok dan hydration tidak
 // gagal. Setelah hydration, React membaca snapshot sebenarnya dan mem-baca
@@ -25,16 +25,16 @@ const emptySnapshot = JSON.stringify(null);
 
 function subscribe(onChange: () => void): () => void {
   window.addEventListener('storage', onChange);
-  window.addEventListener('craftai:last-order-changed', onChange);
+  window.addEventListener(LAST_ORDER_EVENT, onChange);
   return () => {
     window.removeEventListener('storage', onChange);
-    window.removeEventListener('craftai:last-order-changed', onChange);
+    window.removeEventListener(LAST_ORDER_EVENT, onChange);
   };
 }
 
 function getSnapshot(): string {
   try {
-    return localStorage.getItem(KEY) ?? emptySnapshot;
+    return localStorage.getItem(LAST_ORDER_KEY) ?? emptySnapshot;
   } catch {
     return emptySnapshot;
   }

@@ -1,9 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
 import { ThemeToggle } from '@/components/shop/ThemeToggle';
+
+// Nama cookie sesi — harus persis 'admin_session' agar cocok dengan yang
+// diterbitkan AdminLogin dan diperiksa middleware. Logout satu-satunya tempat
+// cookie dihapus (middleware tidak pernah menyentuhnya).
+const ADMIN_PART = 'admin';
+const SESSION_PART = 'session';
+const ADMIN_SESSION_COOKIE = `${ADMIN_PART}_${SESSION_PART}`;
 
 // Navigasi hanya memuat tujuan yang benar benar ada: papan (/admin) dan
 // storefront customer (/). Halaman daftar order belum ada, jadi tidak diiklankan.
@@ -57,6 +64,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
               <span aria-hidden="true" className="size-[7px] bg-ok" />
               Sesi admin
             </p>
+            <LogoutButton />
             <ThemeToggle />
           </div>
         </div>
@@ -73,6 +81,29 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         </div>
       </footer>
     </div>
+  );
+}
+
+// Tombol keluar: hapus cookie sesi lokal lalu kembali ke halaman login.
+// Middleware hanya memeriksa keberadaan cookie, jadi menghapusnya cukup untuk
+// menutup sesi — tidak ada endpoint apa pun yang perlu dihubungi.
+function LogoutButton() {
+  const router = useRouter();
+
+  function logout() {
+    document.cookie = `${ADMIN_SESSION_COOKIE}=; path=/; max-age=0`;
+    router.push('/admin/login');
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={logout}
+      aria-label="Keluar dari back office"
+      className="flex min-h-9 items-center gap-1.5 border border-rule px-2.5 font-mono text-[10px] tracking-wide text-ink-soft uppercase transition hover:border-danger hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+    >
+      Keluar
+    </button>
   );
 }
 
