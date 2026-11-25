@@ -5,7 +5,12 @@ export type OrderStatus = 'draft' | 'paid' | 'in_progress' | 'review' | 'complet
 export type PaymentStatus = 'unpaid' | 'paid';
 export type Role = 'customer' | 'admin' | 'developer';
 export type ThemeColorKey = 'violet' | 'navy' | 'amber' | 'emerald';
-export type AIEngine = 'gemini' | 'local';
+/**
+ * Asal konten poster. Sejak AI dibuang (docs/WHATSAPP-FLOW.md) hanya 'manual'
+ * yang pernah ditulis; 'gemini'/'local' dipertahankan sebagai nilai CHECK
+ * constraint agar data lama tetap sah dibaca.
+ */
+export type PosterEngine = 'manual' | 'gemini' | 'local';
 
 export interface Template {
   id: string;
@@ -34,6 +39,8 @@ export interface Order {
   live_website_url: string | null;
   download_zip_url: string | null;
   dev_note: string | null;
+  /** Tautan draft AI — selalu `null` sejak AI dibuang (kontrak WHATSAPP-FLOW). */
+  ai_draft_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,7 +51,18 @@ export interface AIDraft {
   template_id: string;
   input_prompt_data: DraftBrief;
   ai_generated_content: Draft;
+  /** Provenance konten: 'manual' untuk tulisan editor back-office. */
+  engine: PosterEngine;
   generated_at: string;
+}
+
+/** Brief pesanan (body `POST /api/orders`) — disusun customer di web. */
+export interface OrderBrief {
+  merekLokasi: string;
+  segmenTarget: string;
+  suasanaMerek: string;
+  aksiUtama: string;
+  nadaRekaman: string;
 }
 
 export interface OrderLog {
@@ -101,10 +119,6 @@ export interface DraftBrief {
   toneOfVoice: string;
 }
 
-export interface GenerateDraftResult {
-  content: Draft;
-  engine: AIEngine;
-}
 
 /** Satu baris paket dari `GET /api/packages` (docs/REDESIGN.md §2). */
 export interface PackageOption {

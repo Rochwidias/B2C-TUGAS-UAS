@@ -6,7 +6,7 @@ import { OrderDetailClient } from '@/components/shop/OrderDetailClient';
 export const metadata: Metadata = {
   title: 'Detail Pesanan',
   description:
-    'Lembar detail pesanan poster: peta pengerjaan 5 tahap, estimasi dan garansi sesuai paket, daftar draft dalam kuota, serta tombol minta revisi dan tambah brief. Bisa dilihat tanpa login.',
+    'Lembar detail pesanan poster: peta pengerjaan 5 tahap, estimasi dan garansi sesuai paket, daftar poster dalam kuota, serta tombol minta revisi dan tambah brief. Bisa dilihat tanpa login.',
   alternates: { canonical: '/orders' },
 };
 

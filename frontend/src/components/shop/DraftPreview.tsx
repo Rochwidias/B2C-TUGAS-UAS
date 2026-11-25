@@ -1,34 +1,6 @@
 import { DraftIcon } from './DraftIcon';
 import type { Draft, PosterPoint } from './types';
 
-// Badge engine: satu-satunya penanda asal konten draft. Persegi, border 1.5px,
-// huruf mono (motif "cap status"), bukan pil. Nilainya berasal dari respons
-// server (POST /api/drafts -> engine), jadi tidak pernah mengklaim AI aktif
-// bila yang bekerja adalah generator lokal.
-export function EngineBadge({ engine }: { engine: 'gemini' | 'local' | null | undefined }) {
-  const map = {
-    gemini: { text: 'Engine: Gemini', cls: 'border-ok text-ok' },
-    local: { text: 'Engine: lokal', cls: 'border-warn text-warn' },
-  } as const;
-
-  const entry = engine && map[engine];
-
-  return (
-    <span
-      className={[
-        'inline-flex items-center gap-2 border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em]',
-        entry ? entry.cls : 'border-rule text-ink-soft',
-      ].join(' ')}
-    >
-      <span
-        aria-hidden="true"
-        className={['size-1.5', entry ? 'bg-current' : 'border border-current'].join(' ')}
-      />
-      {entry ? entry.text : 'Belum digenerate'}
-    </span>
-  );
-}
-
 function tint(hex: string, alpha: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(hex) ? `${hex}${alpha}` : 'transparent';
 }

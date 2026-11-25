@@ -1,16 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
-import { DraftPreview, EngineBadge } from './DraftPreview';
 import {
   THEME_OPTIONS,
   type Brief,
-  type Draft,
-  type DraftResponse,
-  type Order,
+  type OrderBriefPayload,
+  type OrderContact,
   type OrderCreatedResponse,
   type PackageOption,
   type Template,
@@ -21,7 +18,10 @@ import {
   packageGuarantee,
   packageSummary,
   readJson,
+  unwrapData,
+  whatsappStageHint,
 } from './types';
+import { contactChatUrl, useContact } from './whatsapp';
 import { API_BASE } from '@/lib/api';
 import { FALLBACK_TEMPLATES, fetchCatalogResult } from '@/lib/catalog';
 import { fetchPackages } from '@/lib/packages';
@@ -117,16 +117,20 @@ function fieldClass(invalid: boolean): string {
   return invalid ? `${inputClass} border-danger` : inputClass;
 }
 
-type GenState =
-  | { phase: 'idle' }
-  | { phase: 'loading' }
-  | { phase: 'error'; message: string }
-  | { phase: 'done'; draftId: string; content: Draft; engine: 'gemini' | 'local' };
-
+// Status pesanan: idle → loading → error, atau selesai dengan nomor pesanan
+// plus tautan wa.me dari respons (docs/WHATSAPP-FLOW.md §Baru).
 type OrderState =
   | { phase: 'idle' }
   | { phase: 'loading' }
-  | { phase: 'error'; message: string };
+  | { phase: 'error'; message: string }
+  | {
+      phase: 'done';
+      orderNumber: string;
+      orderId: string;
+      status: string;
+      /** Kosong bila backend tidak mengirim; tombol jatuh ke kontak resmi. */
+      whatsappUrl: string;
+    };
 
 type PackagesState =
   | { phase: 'loading' }
@@ -134,7 +138,6 @@ type PackagesState =
   | { phase: 'error'; message: string };
 
 export function CustomizerClient({ templateId }: { templateId: string }) {
-  const router = useRouter();
   // Judul/header langsung terisi dari data bawaan: halaman tidak pernah
   // menampilkan "Memuat template" walau backend lambat. Data terbaru dari
   // server menyusul lewat fetchCatalogResult() di bawah.
@@ -154,11 +157,13 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     toneOfVoice: 'Profesional',
   });
 
-  const [gen, setGen] = useState<GenState>({ phase: 'idle' });
   const [order, setOrder] = useState<OrderState>({ phase: 'idle' });
   const [pkgState, setPkgState] = useState<PackagesState>({ phase: 'loading' });
   const [pkgKey, setPkgKey] = useState<string | null>(null);
   const [contact, setContact] = useState({ name: '', whatsapp: '', email: '' });
+  // Nomor WA resmi dari GET /api/contact — pembanding bila respons pesanan
+  // tidak membawa whatsappUrl.
+  const contactInfo = useContact();
   // true setelah pengguna menyentuh sebuah field; pesan validasi baru muncul
   // setelah itu supaya formulir tidak terlihat "merah" sebelum diisi.
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -323,7 +328,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
   const descLength = brief.description.trim().length;
 
   // Validasi per field mengikuti batas yang ditampilkan ke pengguna. Dipakai
-  // untuk menonaktifkan tombol Generate dan menampilkan pesan Bahasa Indonesia.
+  // untuk menonaktifkan tombol kirim pesanan dan menampilkan pesan Bahasa Indonesia.
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
     const brand = brief.brandName.trim();
@@ -344,10 +349,27 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
   const briefValid = Object.keys(errors).length === 0;
 
-  // Dipakai baik sebagai submit handler maupun tombol "coba lagi" di panel
-  // preview (oleh sebab itu parameter event bersifat opsional).
-  async function generate(e?: { preventDefault: () => void }) {
-    e?.preventDefault();
+  // Bentuk brief untuk POST /api/orders: medan kontrak
+  // (docs/WHATSAPP-FLOW.md) diisi dari kolom form, dan medan bentuk-form lama
+  // ikut dikirim supaya back-office tetap punya nama brand, tagline, serta
+  // deskripsi asli pelanggan.
+  function buildBriefPayload(): OrderBriefPayload {
+    const theme = THEME_OPTIONS.find((option) => option.value === brief.themeColor);
+    return {
+      ...brief,
+      templateId,
+      merekLokasi: brief.brandName.trim(),
+      segmenTarget: template ? categoryLabel(template.category) : '',
+      suasanaMerek: theme?.label ?? brief.themeColor,
+      aksiUtama: brief.ctaText.trim(),
+      nadaRekaman: brief.toneOfVoice,
+    };
+  }
+
+  // Satu aksi kirim: pesanan dicatat di web, lalu konfirmasi dan serah terima
+  // berpindah ke chat WhatsApp (docs/WHATSAPP-FLOW.md §Alur baru).
+  async function submitOrder(e: React.FormEvent) {
+    e.preventDefault();
     // Tandai semua field tersentuh agar pesan validasi tampil saat submit diblokir.
     setTouched({
       brandName: true,
@@ -360,49 +382,24 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
       toast.error('Brief belum lengkap', 'Periksa kembali kolom yang ditandai merah.');
       return;
     }
-    setGen({ phase: 'loading' });
-    try {
-      const res = await fetch(`${API_BASE}/api/drafts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(brief),
+    const name = contact.name.trim();
+    const whatsapp = contact.whatsapp.trim();
+    const email = contact.email.trim();
+    if (!name || !whatsapp) {
+      setOrder({
+        phase: 'error',
+        message: 'Lengkapi nama dan nomor WhatsApp sebelum mengirim pesanan.',
       });
-      const result = await readJson<DraftResponse>(res);
-      if (!result.ok) {
-        setGen({ phase: 'error', message: result.error });
-        toast.error('Draft gagal dibuat', result.error);
-        return;
-      }
-      setGen({
-        phase: 'done',
-        draftId: result.data.draftId,
-        content: result.data.content,
-        engine: result.data.engine,
-      });
-      toast.success(
-        'Draft poster berhasil dibuat',
-        result.data.engine === 'gemini' ? 'Disusun oleh Gemini.' : 'Disusun oleh generator lokal.',
-      );
-    } catch {
-      setGen({ phase: 'error', message: 'Jaringan terputus saat menghubungi server. Coba lagi.' });
-      toast.error('Tidak bisa terhubung', 'Periksa koneksi Anda lalu coba lagi.');
-    }
-  }
-
-  async function checkout(e: React.FormEvent) {
-    e.preventDefault();
-    if (gen.phase !== 'done') return;
-    if (!contact.name.trim() || !contact.whatsapp.trim() || !contact.email.trim()) {
-      setOrder({ phase: 'error', message: 'Lengkapi nama, WhatsApp, dan email sebelum mengirim pesanan.' });
-      toast.error('Data kontak belum lengkap', 'Nama, WhatsApp, dan email wajib diisi.');
+      toast.error('Data kontak belum lengkap', 'Nama dan WhatsApp wajib diisi.');
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim())) {
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setOrder({ phase: 'error', message: 'Format email belum benar.' });
       toast.error('Format email belum benar', 'Contoh: nama@email.com');
       return;
     }
-    const selected = pkgState.phase === 'ready' ? pkgState.packages.find((pkg) => pkg.key === pkgKey) : null;
+    const selected =
+      pkgState.phase === 'ready' ? pkgState.packages.find((pkg) => pkg.key === pkgKey) : null;
     if (!selected) {
       setOrder({ phase: 'error', message: 'Pilih paket yang tersedia sebelum mengirim pesanan.' });
       toast.error('Paket belum dipilih', 'Muat ulang daftar paket lalu pilih salah satu.');
@@ -410,45 +407,75 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     }
     setOrder({ phase: 'loading' });
     try {
+      const orderContact: OrderContact = { name, whatsapp, ...(email ? { email } : {}) };
       const res = await fetch(`${API_BASE}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          draftId: gen.draftId,
           templateId,
           packageKey: selected.key,
-          contactName: contact.name.trim(),
-          contactWhatsapp: contact.whatsapp.trim(),
-          contactEmail: contact.email.trim(),
+          brief: buildBriefPayload(),
+          contact: orderContact,
+          // Medan lama tetap dikirim agar back-office yang belum pindah kontrak
+          // menerima pesanan yang sama (deviasi kontrak, dicatat di ringkasan).
+          contactName: orderContact.name,
+          contactWhatsapp: orderContact.whatsapp,
+          contactEmail: orderContact.email ?? '',
         }),
       });
-      const result = await readJson<OrderCreatedResponse & { order: Order }>(res);
+      const result = await readJson<OrderCreatedResponse>(res);
       if (!result.ok) {
         setOrder({ phase: 'error', message: result.error });
         toast.error('Pesanan gagal dikirim', result.error);
         return;
       }
+      // Respons baru dibungkus {data: {order, whatsappUrl}}; route lama
+      // mengirimnya di level teratas.
+      const payload = unwrapData(result.data);
+      const created = payload.order ?? null;
+      const orderNumber = (payload.orderNumber ?? created?.order_number ?? '').trim();
+      if (!orderNumber) {
+        setOrder({
+          phase: 'error',
+          message: 'Server menerima pesanan tetapi tidak mengembalikan nomor pesanan. Coba lagi.',
+        });
+        toast.error('Nomor pesanan tidak diterima', 'Ulangi pengiriman pesanan.');
+        return;
+      }
+      const status = created?.status ?? 'draft';
+      const orderId = created?.id ?? '';
+      const whatsappUrl = typeof payload.whatsappUrl === 'string' ? payload.whatsappUrl : '';
+      setOrder({ phase: 'done', orderNumber, orderId, status, whatsappUrl });
       // Simpan nomor order terakhir agar /orders bisa menawarkan "Lanjutkan
       // pesanan terakhir" (lihat components/shop/LastOrderHint).
       try {
         localStorage.setItem(
           'craftai-last-order',
-          JSON.stringify({
-            number: result.data.orderNumber,
-            id: result.data.order.id,
-            at: Date.now(),
-          }),
+          JSON.stringify({ number: orderNumber, id: orderId, at: Date.now(), status }),
         );
+        window.dispatchEvent(new Event('craftai:last-order-changed'));
       } catch {
-        // Penyimpanan diblokir: lanjutkan redirect tanpa saran.
+        // Penyimpanan diblokir: tombol WhatsApp tetap jalan tanpa pintasan.
       }
-      toast.success('Pesanan terkirim', `Nomor ${result.data.orderNumber} masuk antrean editor.`);
-      router.push(`/orders/${result.data.order.id}`);
+      toast.success(
+        'Pesanan tercatat',
+        `Nomor ${orderNumber} masuk antrean editor. Konfirmasi berjalan di WhatsApp.`,
+      );
     } catch {
       setOrder({ phase: 'error', message: 'Jaringan terputus saat mengirim pesanan. Coba lagi.' });
       toast.error('Tidak bisa terhubung', 'Periksa koneksi Anda lalu coba lagi.');
     }
   }
+
+  // Tautan "Buka WhatsApp": pakai whatsappUrl dari respons; bila tidak ada,
+  // jatuh ke nomor resmi dari GET /api/contact dengan pesan berisi nomor order.
+  const openWhatsappUrl = useMemo(() => {
+    const done = order.phase === 'done' ? order : null;
+    const direct = (done?.whatsappUrl ?? '').trim();
+    if (direct) return direct;
+    if (!done || !contactInfo) return null;
+    return contactChatUrl(contactInfo, done.orderNumber, whatsappStageHint(done.status));
+  }, [order, contactInfo]);
 
   const packages = pkgState.phase === 'ready' ? pkgState.packages : [];
   const selectedPkg = packages.find((pkg) => pkg.key === pkgKey) ?? null;
@@ -492,7 +519,9 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             </Link>
             <h1 className="mt-2 text-[30px] font-semibold leading-[1.02] tracking-tight sm:text-[42px]">
               {template ? template.name : 'Memuat contoh poster'}
-              {template ? <span className="text-ink-soft">, lalu AI menyusun draft posternya.</span> : null}
+              {template ? (
+                <span className="text-ink-soft">, lalu pesanannya dikirim lewat WhatsApp.</span>
+              ) : null}
             </h1>
             <p className="mt-3 font-mono text-[11px] leading-relaxed text-ink-soft">
               {template
@@ -527,7 +556,9 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
         <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-10">
           <div className="flex flex-col gap-8">
             {/* Formulir brief */}
-            <form onSubmit={generate} className="border border-rule bg-surface">
+            {/* Formulir brief tidak mengirim apa pun sendiri: isian baru
+                berangkat bersama pesanan pada Langkah 02. */}
+            <form onSubmit={(e) => e.preventDefault()} className="border border-rule bg-surface">
               <div className="flex items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
                 <h2 className="text-[15px] font-semibold">Brief merek</h2>
                 <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
@@ -702,50 +733,32 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
               </div>
 
               <div className="border-t border-rule p-5">
-                <button
-                  type="submit"
-                  disabled={gen.phase === 'loading' || !briefValid}
-                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 border border-ink bg-accent px-4 text-sm font-semibold text-accent-ink transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--ink)] disabled:translate-y-0 disabled:bg-rule disabled:text-ink-soft disabled:shadow-none"
-                >
-                  {gen.phase === 'loading' ? (
-                    <>
-                      <span
-                        className="size-3.5 animate-spin border-2 border-current border-t-transparent motion-reduce:animate-none"
-                        aria-hidden="true"
-                      />
-                      <span>AI sedang menyusun…</span>
-                    </>
-                  ) : (
-                    <span>Generate Draft Poster AI</span>
-                  )}
-                </button>
                 {!briefValid && (
-                  <p className="mt-2 font-mono text-[11px] leading-relaxed text-ink-soft">
-                    Lengkapi kolom yang wajib diisi untuk mengaktifkan tombol.
+                  <p className="mb-3 font-mono text-[11px] leading-relaxed text-ink-soft">
+                    Lengkapi kolom yang wajib diisi. Tombol kirim di Langkah 02 baru aktif setelah
+                    brief lengkap.
                   </p>
                 )}
-                <p className="mt-3 font-mono text-[10px] leading-relaxed text-ink-soft">
-                  Draft disusun di server dari brief ini. Bila API key Gemini tidak tersedia,
-                  generator lokal deterministik dipakai, dan badge engine menyatakan itu apa
-                  adanya.
+                <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
+                  Brief ini dikirim bersama pesanan dan dibaca oleh editor manusia yang menyusun
+                  poster Anda. Tidak ada generator otomatis yang memprosesnya.
                 </p>
               </div>
             </form>
 
-            {/* Checkout */}
-            <form onSubmit={checkout} className="border border-rule bg-surface">
+            {/* Pesanan via WhatsApp */}
+            <form onSubmit={submitOrder} className="border border-rule bg-surface">
               <div className="flex items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
-                <h2 className="text-[15px] font-semibold">Checkout &amp; kirim pesanan</h2>
+                <h2 className="text-[15px] font-semibold">Paket, kontak &amp; kirim pesanan</h2>
                 <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
-                  Langkah 03
+                  Langkah 02
                 </span>
               </div>
 
               <div className="flex flex-col gap-5 p-5">
                 <p className="text-[13px] leading-relaxed text-ink-soft">
-                  {gen.phase === 'done'
-                    ? 'Draft siap dikirim. Pilih paket, lalu isi kontak yang bisa dihubungi editor.'
-                    : 'Tombol kirim aktif setelah draft poster berhasil dibuat.'}
+                  Pesanan dicatat di web, lalu konfirmasi, pembayaran, dan serah terima poster
+                  berjalan di WhatsApp. Nomor pesanan tampil di layar setelah tombol ditekan.
                 </p>
 
                 {/* Kartu paket dari GET /api/packages: ETA + garansi tampil
@@ -858,18 +871,20 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
                 <div>
                   <label htmlFor="contact-email" className={labelClass}>
-                    Email
+                    Email (opsional)
                   </label>
                   <input
                     id="contact-email"
                     name="contactEmail"
                     type="email"
-                    required
                     value={contact.email}
                     onChange={(e) => setContact({ ...contact, email: e.target.value })}
                     className={inputClass}
                     placeholder="nama@email.com"
                   />
+                  <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-ink-soft">
+                    Cukup diisi bila Anda ingin salinan konfirmasi juga dikirim ke email.
+                  </p>
                 </div>
 
                 {/* Ringkasan transparansi sebelum bayar. */}
@@ -906,7 +921,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
                 <button
                   type="submit"
-                  disabled={gen.phase !== 'done' || order.phase === 'loading' || !selectedPkg}
+                  disabled={order.phase === 'loading' || !selectedPkg || !briefValid}
                   className="inline-flex min-h-12 w-full items-center justify-center gap-2 border border-ink bg-ink px-4 text-sm font-semibold text-paper transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--accent)] disabled:translate-y-0 disabled:border-rule disabled:bg-rule disabled:text-ink-soft disabled:shadow-none"
                 >
                   {order.phase === 'loading' ? (
@@ -918,10 +933,15 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                       <span>Mengirim pesanan</span>
                     </>
                   ) : (
-                    <span>Kirim Pesanan untuk Dikerjakan</span>
+                    <span>Kirim Pesanan via WhatsApp</span>
                   )}
                 </button>
-                {pkgState.phase !== 'ready' && (
+                {!briefValid && (
+                  <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
+                    Lengkapi brief pada Langkah 01 untuk mengaktifkan tombol kirim.
+                  </p>
+                )}
+                {briefValid && pkgState.phase !== 'ready' && (
                   <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
                     Tombol kirim aktif setelah daftar paket berhasil dimuat.
                   </p>
@@ -930,99 +950,155 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             </form>
           </div>
 
-          {/* Lembar preview poster */}
+          {/* Konfirmasi pesanan: nomor order + chat WhatsApp */}
           <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
             <div className="flex flex-wrap items-center justify-between gap-3 border border-rule bg-surface px-4 py-2.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
-                Live preview / poster 4:5
+                Konfirmasi pesanan / via WhatsApp
               </span>
-              <EngineBadge engine={gen.phase === 'done' ? gen.engine : null} />
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
+                {order.phase === 'done' ? 'Pesanan tercatat' : 'Langkah 03'}
+              </span>
             </div>
 
-            {gen.phase === 'idle' && (
+            {order.phase === 'idle' && (
               <div className="flex min-h-[420px] flex-col justify-between gap-6 border border-t-0 border-rule bg-paper p-6">
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
-                    Belum ada draft
+                    Belum ada nomor pesanan
                   </p>
                   <p className="mt-3 max-w-sm text-[17px] font-semibold leading-snug">
-                    Panel ini akan menampilkan poster hasil olahan AI dari brief Anda.
+                    Pesanan dicatat di web, konfirmasi dan serah terimanya lewat WhatsApp.
                   </p>
                   <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                    Isi brief di kolom kiri, lalu tekan{' '}
-                    <strong className="text-ink">Generate Draft Poster AI</strong>. Respons server
-                    dirender apa adanya, termasuk bila isinya berupa generator lokal.
+                    Setelah tombol kirim ditekan, panel ini menampilkan nomor pesanan beserta dua
+                    tautan: membuka chat WhatsApp yang sudah terisi, dan mengecek status pesanan
+                    Anda.
                   </p>
                 </div>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-rule pt-4 font-mono text-[10px] text-ink-soft">
-                  <dt>poster.badge</dt>
-                  <dd>isi brief</dd>
-                  <dt>poster.headline</dt>
-                  <dd>judul besar</dd>
-                  <dt>poster.ctaText</dt>
-                  <dd>tombol ajakan</dd>
-                  <dt>points</dt>
-                  <dd>tepat 3 item</dd>
-                </dl>
+                <ol className="flex flex-col gap-2 border-t border-rule pt-4 text-[12px] leading-relaxed text-ink-soft">
+                  <li>
+                    <span className="font-mono text-[10px] text-ink">01</span> — Editor mencatat
+                    pesanan Anda dengan nomor urut.
+                  </li>
+                  <li>
+                    <span className="font-mono text-[10px] text-ink">02</span> — Harga, estimasi,
+                    dan revisi dikonfirmasi di chat WhatsApp.
+                  </li>
+                  <li>
+                    <span className="font-mono text-[10px] text-ink">03</span> — Poster dikirim
+                    tuntas; status tetap bisa dicek kapan saja.
+                  </li>
+                </ol>
               </div>
             )}
 
-            {gen.phase === 'loading' && (
+            {order.phase === 'loading' && (
               <div
                 className="min-h-[420px] animate-pulse border border-t-0 border-rule bg-paper p-6"
                 aria-busy="true"
               >
-                <span className="sr-only">Server sedang menyusun draft poster dari brief Anda</span>
-                <div className="mx-auto aspect-[4/5] w-full max-w-[420px] border border-rule bg-surface p-5">
-                  <div className="h-3 w-32 bg-rule" aria-hidden="true" />
-                  <div className="mt-6 h-6 w-3/4 bg-rule" aria-hidden="true" />
-                  <div className="mt-3 h-3 w-full bg-rule" aria-hidden="true" />
-                  <div className="mt-2 h-3 w-2/3 bg-rule" aria-hidden="true" />
-                  <div className="mt-6 h-8 w-40 bg-rule" aria-hidden="true" />
-                  <div className="mt-8 grid grid-cols-3 gap-3" aria-hidden="true">
-                    <div className="h-16 bg-rule" />
-                    <div className="h-16 bg-rule" />
-                    <div className="h-16 bg-rule" />
-                  </div>
+                <span className="sr-only">Server sedang mencatat pesanan Anda</span>
+                <div className="mx-auto flex w-full max-w-[420px] flex-col gap-3">
+                  <div className="h-3 w-40 bg-rule" aria-hidden="true" />
+                  <div className="h-14 w-full bg-rule" aria-hidden="true" />
+                  <div className="h-3 w-3/4 bg-rule" aria-hidden="true" />
+                  <div className="h-3 w-2/3 bg-rule" aria-hidden="true" />
+                  <div className="mt-4 h-11 w-full bg-rule" aria-hidden="true" />
+                  <div className="h-11 w-full bg-rule" aria-hidden="true" />
                 </div>
                 <p className="mt-6 font-mono text-[10px] text-ink-soft">
-                  Menyusun badge, headline, subheadline, tombol ajakan, dan tiga poin.
+                  Mencatat pesanan, lalu menyiapkan chat WhatsApp.
                 </p>
               </div>
             )}
 
-            {gen.phase === 'error' && (
-              <div
-                role="alert"
-                className="flex min-h-[420px] flex-col justify-between gap-6 border border-t-0 border-danger bg-paper p-6"
-              >
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-danger">
-                    Draft gagal dibuat
-                  </p>
-                  <p className="mt-3 max-w-sm text-[17px] font-semibold leading-snug">
-                    Server menolak brief ini.
-                  </p>
-                  <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                    {gen.message}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void generate()}
-                  className="inline-flex min-h-11 w-fit items-center border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
-                >
-                  Coba lagi
-                </button>
+            {order.phase === 'error' && (
+              <div role="alert" className="border border-t-0 border-danger bg-paper p-6">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-danger">
+                  Pesanan gagal dikirim
+                </p>
+                <p className="mt-3 max-w-sm text-[17px] font-semibold leading-snug">
+                  Server menolak pesanan ini.
+                </p>
+                <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">
+                  {order.message}
+                </p>
               </div>
             )}
 
-            {gen.phase === 'done' && (
-              <div data-testid="draft-preview" className="border border-t-0 border-rule">
-                <DraftPreview draft={gen.content} />
-                <div className="flex flex-wrap items-center justify-between gap-2 border-x border-b border-rule bg-surface px-4 py-2.5 font-mono text-[10px] text-ink-soft">
-                  <span>draftId {gen.draftId}</span>
-                  <span>Checkout di kolom kiri mengirim draft ini ke editor.</span>
+            {order.phase === 'done' && (
+              <div data-testid="order-created" className="border border-t-0 border-rule bg-paper">
+                <div className="border-b border-rule p-6">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ok">
+                    Pesanan tercatat
+                  </p>
+                  <p className="mt-4 text-[12px] leading-relaxed text-ink-soft">
+                    Nomor pesanan Anda
+                  </p>
+                  <p className="mt-1 font-mono text-[34px] font-semibold leading-none tracking-tight">
+                    {order.orderNumber}
+                  </p>
+                  <dl className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 border-t border-rule pt-4 font-mono text-[10px] text-ink-soft">
+                    <dt>paket</dt>
+                    <dd className="truncate text-ink">{selectedPkg?.name ?? '—'}</dd>
+                    <dt>total</dt>
+                    <dd className="text-ink">
+                      {selectedPkg ? formatRupiah(selectedPkg.price) : '—'}
+                    </dd>
+                    <dt>status</dt>
+                    <dd className="text-ink">{order.status}</dd>
+                    <dt>estimasi</dt>
+                    <dd className="text-ink">{selectedPkg ? packageEta(selectedPkg) || '—' : '—'}</dd>
+                  </dl>
+                </div>
+
+                <div className="border-b border-rule p-6">
+                  <p className="text-[13px] leading-relaxed text-ink-soft">
+                    Chat WhatsApp sudah berisi nomor pesanan, paket, estimasi, serta ringkasan brief
+                    Anda: {whatsappStageHint(order.status)}
+                  </p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                    <a
+                      href={openWhatsappUrl ?? '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 border border-ink bg-accent px-4 text-sm font-semibold text-accent-ink transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--ink)]"
+                    >
+                      <span>Buka WhatsApp</span>
+                    </a>
+                    <Link
+                      href={`/orders?number=${encodeURIComponent(order.orderNumber)}`}
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 border border-ink bg-surface px-4 text-sm font-semibold transition-colors hover:bg-ink hover:text-paper"
+                    >
+                      <span>Cek Status Pesanan</span>
+                    </Link>
+                  </div>
+                  {!openWhatsappUrl && (
+                    <p className="mt-3 font-mono text-[10px] leading-relaxed text-danger">
+                      Tautan WhatsApp belum tersedia. Buka chat resmi kami dan sebutkan nomor
+                      pesanan di atas.
+                    </p>
+                  )}
+                  {contactInfo?.whatsappNumber && (
+                    <p className="mt-3 font-mono text-[10px] leading-relaxed text-ink-soft">
+                      Nomor resmi: {contactInfo.whatsappNumber}
+                    </p>
+                  )}
+                </div>
+
+                <div className="p-6">
+                  <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
+                    Simpan nomor {order.orderNumber}. Halaman Lacak Pesanan menerima nomor tersebut
+                    kapan saja lewat kolom pencarian.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOrder({ phase: 'idle' })}
+                    className="mt-4 inline-flex min-h-11 w-full items-center justify-center border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
+                  >
+                    Kirim pesanan baru
+                  </button>
                 </div>
               </div>
             )}

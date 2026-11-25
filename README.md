@@ -1,14 +1,16 @@
 # Aether Creative
 
 B2C **platform pembuatan poster** untuk UMKM — tugas UAS. Customer memilih contoh
-poster per segmen, mengisi brief merek, AI menghasilkan draft konten poster
-(JSON terstruktur), lalu editor/manusia memvalidasi, mengerjakan, dan menyerahkan
-hasil siap pakai beserta source code-nya.
+poster per segmen, mengisi brief merek + kontak, lalu **pesanan dicatat di web
+dan konfirmasi/serah terima hasil lewat WhatsApp (`wa.me`)**. Konten poster
+disusun **editor manusia lewat back-office** — tidak ada AI (tidak ada
+`POST /api/drafts`, tidak ada Gemini, tidak ada generator lokal).
 
 Alur kerja: **Brief merek → Editor validasi → Hasil siap pakai.**
 
-Arah desain & kontrak teknis terbaru ada di [`docs/REDESIGN.md`](docs/REDESIGN.md)
-(menggantikan bagian `docs/SPEC.md` yang bertentangan). Rencana bisnis awal
+Arah desain & kontrak teknis terbaru ada di [`docs/WHATSAPP-FLOW.md`](docs/WHATSAPP-FLOW.md)
+(**kontrak yang berlaku**) dan [`docs/REDESIGN.md`](docs/REDESIGN.md) (menggantikan
+bagian `docs/SPEC.md` yang bertentangan). Rencana bisnis awal
 (Milestone 1, merek CraftAI Studio) tetap disimpan utuh di [`PLAN.md`](PLAN.md)
 beserta prototype statisnya di [`index.html`](index.html).
 
@@ -49,11 +51,12 @@ B2C-TUGAS-UAS/
   frontend/   Next.js 16 App Router  — UI saja, fetch ke backend     (port 3000)
 ```
 
-- **backend/** — API murni: katalog contoh poster, paket harga, draft AI
-  (Gemini + fallback lokal), order, kuota paket, revisi, delivery, login admin,
-  statistik, export HTML poster. Database `backend/data/app.db` (sqlite bawaan
-  Node, auto-create + migrasi idempoten + seed). Gate admin & rate limit per IP
-  hidup di sini.
+- **backend/** — API murni: katalog contoh poster, paket harga, konten poster
+  (disimpan editor via `PUT /api/admin/orders/:id/poster`, `engine = 'manual'`),
+  `GET /api/contact` (link `wa.me` dari env `WHATSAPP_NUMBER`), order, kuota
+  paket, revisi, delivery, login admin, statistik, export HTML poster. Database
+  `backend/data/app.db` (sqlite bawaan Node, auto-create + migrasi idempoten +
+  seed). Gate admin & rate limit per IP hidup di sini.
 - **frontend/** — halaman customer (`/`, `/customizer/[id]`, `/orders`) dan
   back-office (`/admin`). Semua akses data lewat `fetch` ke `NEXT_PUBLIC_API_URL`
   (default `http://localhost:4000`); tidak ada route `/api` dan tidak ada akses
@@ -80,14 +83,15 @@ Dev mode: `npm run dev` di masing-masing folder.
 ```
 PLAN.md            dokumen perencanaan awal (Milestone 1, CraftAI Studio)
 index.html         prototype HTML statis (Milestone 1)
-docs/REDESIGN.md   kontrak terbaru: identitas, paket, skema draft, API, halaman
+docs/WHATSAPP-FLOW.md  kontrak yang berlaku: alur pesanan & serah terima WhatsApp
+docs/REDESIGN.md   kontrak desain: identitas, paket, skema konten poster, API, halaman
 docs/SPEC.md       kontrak teknis lama (berlaku sejauh tidak bertentangan)
 docs/DEPLOY.md     panduan deploy Vercel + Render
 backend/           API Express
   src/index.ts     server HTTP: CORS, cookie, security headers, mount routes
-  src/routes/      templates, packages, drafts, orders, delivery, admin, export
+  src/routes/      templates, packages, contact, orders, delivery, admin, export
   src/services/    orders (checkout, kuota, revisi), stats (agregat admin)
-  src/lib/         db, ai, render, validate, security, ratelimit, http
+  src/lib/         db, brief, whatsapp, render, validate, security, ratelimit, http
   src/middleware/  adminAuth (verifikasi token sesi)
   data/app.db      sqlite (auto-create, migrasi idempoten, seed idempoten)
 frontend/          Next.js (App Router + TypeScript + Tailwind)
@@ -98,17 +102,18 @@ frontend/          Next.js (App Router + TypeScript + Tailwind)
   tests/           uji API, keamanan, e2e Playwright, fitur
 ```
 
-## Kunci API (opsional)
-
-Tanpa kunci, generator AI bekerja mode **lokal** (deterministik, konten poster
-benar-benar memakai brief customer). Dengan kunci, draft dihasilkan model Gemini
-dan badge engine menampilkan `gemini`:
+## Env backend
 
 ```bash
 # backend/.env  (atau environment)
-GEMINI_API_KEY=***
-ADMIN_PASSWORD=admin123
+ADMIN_PASSWORD=admin123      # password back-office
+WHATSAPP_NUMBER=6281234567890  # nomor WA bisnis, format internasional tanpa '+'
 ```
+
+`WHATSAPP_NUMBER` dipakai `GET /api/contact` untuk merakit semua link
+`https://wa.me/<number>` (Buka WhatsApp saat checkout, Chat via WhatsApp di
+`/orders`, Chat ke Customer di back-office). Nilai default di atas adalah
+placeholder — **wajib diganti** di produksi (lihat [`docs/DEPLOY.md`](docs/DEPLOY.md)).
 
 ## Akun demo
 

@@ -44,10 +44,10 @@ function resolveCustomerOrder(req: Request, body: Record<string, unknown>, res: 
   return order;
 }
 
-// POST /api/orders — checkout publik (rate limit: 5 per 10 menit per IP).
+// POST /api/orders — pesanan baru TANPA draftId/draft AI (kontrak WHATSAPP-FLOW §3).
 router.post('/api/orders', (req: Request, res: Response, _next: NextFunction): void => {
-  // Checkout publik: 5 percobaan per 10 menit per IP menahan spam order.
-  if (!enforceRateLimit(req, res, 'orders', 'checkout', 'Terlalu banyak percobaan order.')) return;
+  // Bucket customerWrite (10/menit) — bucket 'drafts' sudah dibuang bersama AI.
+  if (!enforceRateLimit(req, res, 'orders', 'customerWrite', 'Terlalu banyak percobaan order.')) return;
 
   const body = bodyObject(req.body);
   if (!body) {
@@ -61,7 +61,10 @@ router.post('/api/orders', (req: Request, res: Response, _next: NextFunction): v
     return;
   }
 
-  sendOk(res, { order: result.order, orderNumber: result.order.order_number, draft: result.draft, logs: result.logs }, 201);
+  // Kontrak WHATSAPP-FLOW: respons `{ data: { order, whatsappUrl } }`.
+  // Order status 'draft', ai_draft_id NULL; whatsappUrl sudah terisi pesan
+  // konfirmasi (nomor order, nama paket, ETA, brief).
+  sendOk(res, { data: { order: result.order, whatsappUrl: result.whatsappUrl }, logs: result.logs }, 201);
 });
 
 // GET /api/orders?number=... — lacak order publik (rate limit: 20 per menit).
@@ -111,7 +114,6 @@ router.post('/api/orders/:id/briefs', async (req: Request, res: Response, _next:
   sendOk(res, {
     draftId: result.draft.id,
     content: result.content,
-    engine: result.engine,
     ...result.detail,
   }, 201);
 });

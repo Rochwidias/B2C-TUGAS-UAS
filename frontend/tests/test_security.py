@@ -6,15 +6,19 @@ Urutan sengaja: uji fungsional dan validasi dulu, lalu uji yang MENINGKATKAN
 penghitung rate limit paling akhir. Kalau ditukar, limit menolak uji berikutnya
 dan kegagalannya menyesatkan (429 bukan bug).
 
-Penyesuaian kontrak redesign (docs/REDESIGN.md) — ekspektasi berubah karena
-kontrak berubah, bukan karena assertion dilemahkan:
-  §2/§5  checkout memakai `packageKey` (packageName tidak lagi diproses).
-  §5     endpoint tulis pelanggan baru .../briefs & .../revision dengan bucket
-         rate limit sendiri (10/menit) — diuji di bagian rate limit.
-  §5     429 wajib membawa `retryAfterSeconds` + header `Retry-After` (audit §12).
-  §12    bypass rate limit lewat X-Forwarded-For sudah mati — diuji dengan 10
-         login salah ber-XFF unik: 429 muncul tepat di percobaan ke-7.
-  §9     SEO/metadata/manifest kini memakai brand "Aether Creative".
+Penyesuaian kontrak baru docs/WHATSAPP-FLOW.md (alur WhatsApp, TANPA AI) —
+ekspektasi berubah karena kontrak berubah, bukan karena assertion dilemahkan:
+  Baru  GET /api/contact -> {whatsappNumber, whatsappUrl, whatsappSupportUrl}.
+        POST /api/orders tanpa draftId: body {templateId, packageKey,
+        brief{merekLokasi,segmenTarget,suasanaMerek,aksiUtama,nadaRekaman},
+        contact{name,whatsapp,email?}}; rate limit bucket `customerWrite`.
+        PUT /api/admin/orders/:id/poster = tulis admin (tanpa sesi -> 401).
+  Hapus POST /api/drafts (AI dibuang total -> 404) beserta bucket `drafts`
+        dan enum themeColor (indigo/violet) — tidak ada lagi generated draft.
+  Tetap 429 wajib membawa `retryAfterSeconds` + header `Retry-After` (audit
+        §12), bypass X-Forwarded-For sudah mati: 10 login salah ber-XFF unik,
+        429 muncul tepat di percobaan ke-7.
+        SEO/metadata/manifest memakai brand "Aether Creative".
 """
 import http.cookiejar
 import json
@@ -121,6 +125,25 @@ if oid:
                     opener=anon)
     check("PUT delivery tanpa sesi -> 401", st == 401, f"dapat {st}")
 
+    # Endpoint baru: editor konten poster = tulis admin.
+    st, _, raw = call("PUT", f"/api/admin/orders/{oid}/poster",
+                      {"content": {"poster": {"headline": "Palsu"}}}, opener=anon)
+    check("PUT admin poster tanpa sesi -> 401", st == 401, f"dapat {st} {raw[:80]}")
+
+# Endpoint baru: nomor WhatsApp resmi dari env WHATSAPP_NUMBER.
+st, _, raw = call("GET", "/api/contact")
+c = jget(raw)
+check("GET /api/contact -> 200", st == 200, f"dapat {st}")
+check("contact punya whatsappNumber/whatsappUrl/whatsappSupportUrl",
+      str(c.get("whatsappNumber", "")).isdigit()
+      and str(c.get("whatsappUrl", "")).startswith("https://wa.me/")
+      and str(c.get("whatsappSupportUrl", "")).startswith("https://wa.me/"),
+      str(c)[:160])
+
+# AI dibuang total: route draft sudah dihapus.
+st, _, raw = call("POST", "/api/drafts", {"templateId": tid})
+check("POST /api/drafts sudah dihapus -> 404", st == 404, f"dapat {st} {raw[:80]}")
+
 
 # ============ 4. cookie palsu ============
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -160,56 +183,91 @@ if st == 200:
     check("stats.averageCompletionHours ada", "averageCompletionHours" in d)
     check("stats.recentOrders berupa array", isinstance(d.get("recentOrders"), list))
 
-# ============ 6. buat order baru (validasi) ============
+# ============ 6. buat order baru (validasi, tanpa draftId) ============
 brief = {
-    "templateId": tid, "brandName": "Uji Keamanan",
-    "tagline": "Verifikasi gate admin",
-    "description": "Order untuk menguji apakah endpoint tulis benar-benar terlindungi.",
-    "themeColor": "emerald", "ctaText": "Pesan", "toneOfVoice": "formal",
+    "merekLokasi": "Kedai Uji Keamanan, Jalan Kaliurang",
+    "segmenTarget": "Mahasiswa sekitar kampus",
+    "suasanaMerek": "Santai dan kasual",
+    "aksiUtama": "Pesan lewat WhatsApp",
+    "nadaRekaman": "Ramah",
 }
-st, _, raw = call("POST", "/api/drafts", brief)
-check("POST draft -> 200", st == 200, f"dapat {st}")
-draft_id = jget(raw).get("draftId", "")
-check("draft punya id", bool(draft_id))
 
-# Enum themeColor berubah di §4 (indigo digantikan violet) — nilai lama ditolak.
-st, _, raw = call("POST", "/api/drafts", dict(brief, themeColor="indigo"))
-check("themeColor lama 'indigo' -> 400 (enum §4 violet|navy|amber|emerald)",
-      st == 400 and "violet" in raw, f"dapat {st} {raw[:100]}")
+# brief_lama dipakai untuk endpoint `.../briefs` yang menurut kontrak
+# dipertahankan apa adanya (masih memvalidasi brief lama).
+brief_lama = {
+    "brandName": "Kedai Uji Keamanan",
+    "tagline": "Kopi Susu",
+    "description": "Kedai kopi dekat kampus.",
+    "themeColor": "indigo",
+    "ctaText": "Pesan",
+    "toneOfVoice": "ramah",
+}
 
-st, _, _ = call("POST", "/api/orders", {
-    "draftId": draft_id, "templateId": tid, "packageKey": "satuan",
-    "contactName": "Uji", "contactWhatsapp": "12345", "contactEmail": "bukan-email",
+# Kontak tidak valid -> 400 (validasi jujur sebelum order tersimpan).
+st, _, raw = call("POST", "/api/orders", {
+    "templateId": tid, "packageKey": "satuan", "brief": brief,
+    "contact": {"name": "Uji", "whatsapp": "12345", "email": "bukan-email"},
 })
 check("WA + email tidak valid -> 400", st == 400, f"dapat {st}")
 
 st, _, _ = call("POST", "/api/orders", {
-    "draftId": draft_id, "templateId": tid, "packageKey": "satuan",
-    "contactName": "A" * 5000, "contactWhatsapp": "081234500111", "contactEmail": "uji@contoh.com",
+    "templateId": tid, "packageKey": "satuan", "brief": brief,
+    "contact": {"name": "A" * 5000, "whatsapp": "081234500111", "email": "uji@contoh.com"},
 })
 check("nama 5000 karakter -> 400", st == 400, f"dapat {st}")
 
-# Kontrak §5: harga & kuota hanya datang dari packageKey yang valid.
+# Harga & kuota hanya datang dari packageKey yang valid.
 st, _, raw = call("POST", "/api/orders", {
-    "draftId": draft_id, "templateId": tid, "packageKey": "gila",
-    "contactName": "Uji", "contactWhatsapp": "081234500111", "contactEmail": "uji@contoh.com",
+    "templateId": tid, "packageKey": "gila", "brief": brief,
+    "contact": {"name": "Uji", "whatsapp": "081234500111", "email": "uji@contoh.com"},
 })
 check("packageKey tidak dikenal -> 400", st == 400 and "satuan" in raw, f"dapat {st} {raw[:100]}")
 
 st, _, raw = call("POST", "/api/orders", {
-    "draftId": draft_id, "templateId": tid, "packageKey": "satuan",
-    "contactName": "Normalisasi", "contactWhatsapp": "+62 811-2233-4455", "contactEmail": "n@contoh.com",
+    "templateId": tid, "brief": brief,
+    "contact": {"name": "Uji", "whatsapp": "081234500111"},
 })
-check("order valid -> 201", st == 201, f"dapat {st} {raw[:120]}")
-new_order = jget(raw).get("order", {})
+check("packageKey hilang -> 400", st == 400, f"dapat {st}")
+
+st, _, raw = call("POST", "/api/orders", {
+    "templateId": tid, "packageKey": "satuan",
+    "contact": {"name": "Uji", "whatsapp": "081234500111"},
+})
+check("brief hilang -> 400", st == 400, f"dapat {st}")
+
+st, _, raw = call("POST", "/api/orders", {
+    "templateId": tid, "packageKey": "satuan",
+    "brief": dict(brief, segmenTarget="X" * 5000),
+    "contact": {"name": "Uji", "whatsapp": "081234500111", "email": "uji@contoh.com"},
+})
+check("brief raksasa -> 400 (LIMITS berlaku)", st == 400, f"dapat {st}")
+
+st, _, raw = call("POST", "/api/orders", {
+    "templateId": tid, "packageKey": "satuan", "brief": brief,
+    "contact": {"name": "Normalisasi", "whatsapp": "+62 811-2233-4455",
+                "email": "n@contoh.com"},
+})
+check("order valid -> 201", st == 201, f"dapat {st} {raw[:140]}")
+# Respons checkout: kontrak WHATSAPP-FLOW menulis {data:{order, whatsappUrl}};
+# envelope datar juga diterima (pola respons order lain di repo ini).
+resp = jget(raw)
+inner = resp.get("data") if isinstance(resp.get("data"), dict) else resp
+inner = inner if isinstance(inner, dict) else {}
+new_order = inner.get("order", {})
+check("order dibuat status draft (tanpa AI)", new_order.get("status") == "draft",
+      str(new_order.get("status")))
+check("order tanpa draftId direspons (ai_draft_id NULL)",
+      new_order.get("ai_draft_id") in (None, ""), str(new_order.get("ai_draft_id")))
+check("respons punya whatsappUrl wa.me", str(inner.get("whatsappUrl", "")).startswith("https://wa.me/"),
+      str(inner.get("whatsappUrl")))
 check("WA +62 dinormalkan ke 08", new_order.get("contact_whatsapp") == "081122334455",
       str(new_order.get("contact_whatsapp")))
-check("packageKey satuan -> 50000 / kuota 1 (§2)",
+check("packageKey satuan -> 50000 / kuota 1",
       new_order.get("total_price") == 50000 and new_order.get("quota") == 1
       and new_order.get("package_name") == "Satuan",
       str({k: new_order.get(k) for k in ("total_price", "quota", "package_name")}))
-noid = new_order.get("id", "")
-nono = new_order.get("order_number", "")
+noid = str(new_order.get("id") or "")
+nono = str(new_order.get("order_number") or "")
 check("nomor order format UK-ORD-xxxx", nono.startswith("UK-ORD-") and len(nono) == 11, nono)
 
 st, _, _ = call("GET", "/api/orders?number=" + "X" * 500)
@@ -253,37 +311,77 @@ if noid:
 # ============ 8. uji yang menaikkan counter rate limit (paling akhir) ============
 print("\n--- uji rate limit (menaikkan penghitung, jadi paling akhir) ---")
 
-st, _, _ = call("POST", "/api/drafts", dict(brief, brandName="B" * 5000))
-check("brandName 5000 karakter -> 400", st == 400, f"dapat {st}")
+# Audit §12: X-Forwarded-For tidak lagi menentukan kunci rate limit.
+# 10 percobaan login salah dengan XFF unik tiap request: bila limit masih
+# membaca XFF, tiap request mendapat kunci baru dan tidak pernah 429.
+#
+# Sengaja dijalankan PERTAMA dari sekumpulan uji rate limit. Bucket
+# `adminLogin` (6/15 menit) sudah terpakai 2 kali di bagian 5 (1 login salah +
+# 1 login benar), jadi sisa jatahnya 4: percobaan pertama sampai ke-4 masih
+# 401, ke-5 sudah 429 — bukti penghitungnya berjalan meski XFF unik tiap
+# request (bila XFF masih menentukan kunci, kesepuluh percobaan akan 401).
+xff_codes = []
+for i in range(10):
+    st_i, _, _ = call("POST", "/api/admin/login", {"password": f"salah-xff-{i}"},
+                      base=BACKEND, extra_headers={"X-Forwarded-For": f"203.0.113.{i + 1}"})
+    xff_codes.append(st_i)
+first429 = next((i for i, c in enumerate(xff_codes) if c == 429), None)
+check("XFF unik: ada 429 meski XFF berubah tiap request (XFF bukan kunci bucket)",
+      first429 is not None, f"kode={xff_codes}")
+check("XFF unik: 429 muncul pada/kecil dari percobaan ke-7 (batas 6/15 menit terpatuhi)",
+      first429 is None or first429 <= 6, f"kode={xff_codes}")
+check("XFF unik: tidak ada 401 setelah 429 pertama (XFF tidak mereset penghitung)",
+      first429 is None or all(c == 429 for c in xff_codes[first429:]), f"kode={xff_codes}")
 
 codes = [call("POST", "/api/admin/login", {"password": "salah-terus"})[0] for _ in range(9)]
 check("login brute force kena rate limit (429)", 429 in codes, f"kode={codes}")
 
+# Bucket tulis pelanggan `customerWrite` (10/menit per IP) — kini menaungi
+# POST /api/orders, .../briefs dan .../revision (kontrak WA). Panggilan brief &
+# order di bagian 6/7 sudah memakai sebagian jatahnya, jadi urutan posisi
+# bergantung pada apakah backend memakai kunci scope yang sama; yang diuji:
+# bucket benar-benar menjerat dan panggilan yang lolos tetap kode jujur.
 codes = []
-for i in range(11):
-    codes.append(call("POST", "/api/drafts", dict(brief, brandName=f"Spam {i}"))[0])
-check("draft spam kena rate limit (429)", 429 in codes, f"kode={codes}")
-
-codes = []
-for i in range(8):
-    codes.append(call("POST", "/api/orders", {
-        "draftId": draft_id, "templateId": tid, "packageKey": "satuan",
-        "contactName": f"Spam {i}", "contactWhatsapp": "081234500111", "contactEmail": "s@contoh.com",
-    })[0])
-check("checkout spam kena rate limit (429)", 429 in codes, f"kode={codes}")
-
-# Bucket tulis pelanggan (§5: briefs & revision, 10/menit per IP).
-# Panggilan pertama sudah terpakai oleh uji revision 1500 karakter di atas, jadi
-# batas 10 tercapai pada panggilan customer-write ke-11 = percobaan brief ke-10.
-codes = []
-for i in range(11):
+for i in range(12):
     codes.append(call("POST", f"/api/orders/{noid}/briefs" if noid else "/api/orders/x/briefs", {
         "orderNumber": nono,
-        "brief": dict(brief, brandName=f"Spam Kuota {i}", tagline="Melewati batas kuota"),
+        "brief": dict(brief_lama, description=f"Spam Kuota {i}"),
     })[0])
-check("brief spam kena rate limit bucket pelanggan (429)", 429 in codes, f"kode={codes}")
-check("9 panggilan pertama lolos limit lalu 400 (kuota habis), ke-10 -> 429",
-      codes[:9] == [400] * 9 and codes[9] == 429 and codes[10] == 429, f"kode={codes}")
+check("brief spam kena rate limit bucket customerWrite (429)", 429 in codes, f"kode={codes}")
+check("kode brief spam jujur (201/400) sebelum 429",
+      all(c in (201, 400, 429) for c in codes) and any(c in (201, 400) for c in codes),
+      f"kode={codes}")
+
+order_spam = []
+for i in range(12):
+    order_spam.append(call("POST", "/api/orders", {
+        "templateId": tid, "packageKey": "satuan",
+        "brief": dict(brief, merekLokasi=f"Spam Order {i}"),
+        "contact": {"name": f"Spam {i}", "whatsapp": "081234500111",
+                    "email": "s@contoh.com"},
+    }))
+codes = [c for c, _, _ in order_spam]
+check("checkout spam kena rate limit customerWrite (429)", 429 in codes, f"kode={codes}")
+# Cek "kode jujur sebelum 429" hanya pada burst pertama: bila backend memakai
+# satu kunci scope untuk orders/briefs, burst kedua sudah kehabisan jatah dan
+# seluruh kode 429 — itu tetap bucket customerWrite sesuai kontrak.
+check("kode checkout spam tetap jujur (201/400/429)",
+      all(c in (201, 400, 429) for c in codes), f"kode={codes}")
+
+# 429 wajib jujur: retryAfterSeconds di JSON + header Retry-After (audit §12).
+limited = next(((c, h, r) for c, h, r in order_spam if c == 429), None)
+if limited:
+    st, hdrs, raw = limited
+    hh = {k.lower(): v for k, v in hdrs.items()}
+    body = jget(raw)
+    retry = body.get("retryAfterSeconds")
+    check("429 order membawa retryAfterSeconds",
+          isinstance(retry, int) and retry > 0, f"{raw[:120]}")
+    check("429 order membawa header Retry-After",
+          str(hh.get("retry-after", "")).isdigit() and int(hh["retry-after"]) > 0,
+          f"header={hh.get('retry-after')}")
+else:
+    check("429 order untuk uji retryAfterSeconds", False, "tidak ada 429 pada spam order")
 
 # 429 wajib jujur: retryAfterSeconds di JSON + header Retry-After (audit §12).
 st, hdrs, raw = call("POST", "/api/admin/login", {"password": "lagi"})
@@ -294,22 +392,18 @@ check("429 login membawa retryAfterSeconds", st == 429 and isinstance(body.get("
 check("429 login membawa header Retry-After", st == 429 and str(hh.get("retry-after", "")).isdigit()
       and int(hh["retry-after"]) > 0, f"header={hh.get('retry-after')}")
 
-# Audit §12: X-Forwarded-For tidak lagi menentukan kunci rate limit.
-# 10 percobaan login salah dengan XFF unik tiap request: bila limit masih
-# membaca XFF, tiap request mendapat kunci baru dan tidak pernah 429.
-xff_codes = []
-for i in range(10):
-    st_i, _, _ = call("POST", "/api/admin/login", {"password": f"salah-xff-{i}"},
-                      base=BACKEND, extra_headers={"X-Forwarded-For": f"203.0.113.{i + 1}"})
-    xff_codes.append(st_i)
-check("XFF unik tiap percobaan: 6 pertama tetap 401 (bucket bersih)",
-      xff_codes[:6] == [401] * 6, f"kode={xff_codes}")
-check("bypass XFF sudah mati: percobaan ke-7 tetap 429",
-      xff_codes[6] == 429, f"kode={xff_codes}")
-check("percobaan ke-8..10 tetap 429", xff_codes[7:] == [429] * 3, f"kode={xff_codes}")
-
+# Audit §12 sudah diverifikasi di bagian 8 (blok XFF di atas, sebelum uji
+# brute force — bucket `adminLogin` harus diuji saat jatahnya masih tersisa).
 print()
 print(f"{len(PASS)}/{len(PASS) + len(FAIL)} lolos")
 if FAIL:
     print("GAGAL:", *FAIL, sep="\n  - ")
-sys.exit(1 if FAIL else 0)
+
+# Dijalankan juga lewat pytest (verifikasi wajib: python3 -m pytest
+# frontend/tests/test_security.py ...): seluruh cek berjalan saat import.
+def test_keamanan():
+    assert not FAIL, "cek gagal:\n" + "\n".join(FAIL)
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

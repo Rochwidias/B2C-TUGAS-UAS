@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { CopyButton } from '@/components/shop/CopyButton';
 import { DraftPreview } from '@/components/shop/DraftPreview';
+import { WhatsAppChat } from '@/components/shop/WhatsAppChat';
 import { Footer } from '@/components/shop/Footer';
 import { Header } from '@/components/shop/Header';
 import { Stepper } from '@/components/shop/Stepper';
@@ -465,7 +466,7 @@ function OrderDetailInner() {
               <EmptyState
                 icon="—"
                 title="Belum ada draft terlampir"
-                description="Draft dibuat saat brief pertama dikirim. Bila pesanan ini dibuat sebelum fitur draft aktif, tidak ada pratinjau yang bisa ditampilkan."
+                description="Poster disusun editor dari brief pertama yang Anda kirim. Bila pesanan ini dibuat sebelum fitur poster aktif, tidak ada pratinjau yang bisa ditampilkan."
               />
             ) : (
               <ol className="flex flex-col divide-y divide-rule border-t border-rule">
@@ -481,7 +482,7 @@ function OrderDetailInner() {
                         {row.brief?.tagline ?? 'Tagline tidak tersimpan pada baris ini.'}
                       </p>
                       <p className="mt-1 font-mono text-[10px] text-ink-soft">
-                        {row.content ? `draftId ${row.id}` : `id ${row.id}`}
+                        {row.content ? `poster ${row.id}` : `id ${row.id}`}
                       </p>
                     </div>
                   </li>
@@ -602,6 +603,12 @@ function OrderDetailInner() {
                 </div>
               ))}
             </dl>
+            {/* Chat langsung ke nomor resmi studio, pesan sesuai tahap pesanan. */}
+            <WhatsAppChat
+              className="mt-4"
+              status={order.status}
+              orderNumber={order.order_number}
+            />
           </section>
 
           {previewContent ? (
@@ -611,7 +618,7 @@ function OrderDetailInner() {
                   Pratinjau draft poster
                 </h2>
                 <span className="font-mono text-[10px] text-ink-soft">
-                  draftId {state.data.draft?.id ?? draftRows[0]?.id}
+                  id {state.data.draft?.id ?? draftRows[0]?.id}
                 </span>
               </div>
               <DraftPreview draft={previewContent} />
@@ -624,7 +631,7 @@ function OrderDetailInner() {
               <EmptyState
                 icon="—"
                 title="Draft belum terlampir pada pesanan ini"
-                description="Draft dibuat saat brief dikirim. Bila pesanan ini dibuat sebelum fitur draft aktif, tidak ada pratinjau yang bisa ditampilkan. Hubungi editor bila Anda butuh salinan brief."
+                description="Poster disusun editor dari brief Anda. Bila pesanan ini dibuat sebelum fitur poster aktif, tidak ada pratinjau yang bisa ditampilkan. Hubungi editor lewat WhatsApp bila Anda butuh salinan brief."
               />
             </section>
           )}

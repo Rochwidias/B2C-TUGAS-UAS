@@ -6,6 +6,12 @@ Dokumen ini menggantikan `../docs/SPEC.md` **sejauh bertentangan**; hal teknis
 yang tidak diubah di sini (keamanan, rate limit, layout kepemilikan file, error
 handling, aksesibilitas) tetap mengikuti SPEC.
 
+> **Kontrak terbaru: `docs/WHATSAPP-FLOW.md` (2026-11-25)** — AI dibuang total
+> (`POST /api/drafts`, Gemini, generator lokal, badge `engine`), konten poster
+> disusun editor manusia lewat back-office, pesanan & serah terima lewat
+> WhatsApp (`wa.me`). Di bagian mana pun dokumen ini masih menyebut AI/draft
+> generate, **WHATSAPP-FLOW-lah yang berlaku**.
+
 TIDAK boleh diubah: `../PLAN.md` dan `../index.html` — keduanya artefak
 Milestone 1 (CraftAI Studio) dan tetap dipertahankan apa adanya. Jangan
 `git commit`, jangan `rm -rf`.
@@ -19,7 +25,7 @@ Milestone 1 (CraftAI Studio) dan tetap dipertahankan apa adanya. Jangan
 | Nilai jual | cepat, AI + human-in-the-loop | "Cepat, terjangkau, sesuai karakter usaha dan lebih tepercaya" |
 | Target | umum | mahasiswa & pelajar Yogyakarta (tugas & usaha sampingan); segmen tambahan: kreator/portofolio digital, toko online; aktif IG/TikTok/WA |
 | Harga | 3 paket website 150k/250k/350k | **Satuan Rp50.000/order** · **Paket Hemat Rp100.000 = 3 order + review editor** |
-| Alur kerja | brief → draft AI → checkout → dev → live | **Brief merek → Editor validasi → Hasil siap pakai** |
+| Alur kerja | brief → draft AI → checkout → dev → live | **Brief merek → Editor validasi → Hasil siap pakai** — pesanan dicatat di web lalu **serah terima/konfirmasi/revisi lewat WhatsApp (`wa.me`)** |
 
 Teks UI tetap bahasa Indonesia, nada profesional (mengikuti nada `index.html`).
 Merek ditulis **"Aether Creative"** (bukan "AetherCreative" / "Aether"). Semua
@@ -56,10 +62,16 @@ orders(id, order_number, template_id, status, payment_status, total_price,
        package_key  /* BARU: 'satuan' | 'hemat' */, 
        quota        /* BARU: 1 | 3, default 1 */,
        live_website_url, download_zip_url, dev_note, created_at, updated_at)
-ai_drafts(id, order_id, template_id, input_prompt_data, ai_generated_content, generated_at)
+ai_drafts(id, order_id, template_id, input_prompt_data, ai_generated_content,
+          engine /* 'manual' untuk konten hasil editor; nilai lama gemini/local
+                    dibiarkan apa adanya pada data lama */, generated_at)
 order_logs(id, order_number?, order_id, status_from, status_to, developer_note, timestamp)
 ```
 
+- Kolom `ai_drafts` **dipakai sebagai penyimpan konten poster**, bukan hasil
+  AI: editor menyimpannya lewat `PUT /api/admin/orders/:id/poster`
+  (`engine = 'manual'`, audit-log `poster.edited`). Order baru dibuat dengan
+  `ai_draft_id = NULL` — order baru tidak punya konten sampai editor mengisi.
 - `remaining` sebuah order = `quota - COUNT(ai_drafts WHERE order_id = orders.id)`.
   Tidak ada kolom counter tambahan.
 - **Catatan tambahan/revision** tidak menambah kolom: tulis baris `order_logs`
@@ -79,7 +91,11 @@ backend: `kuliner → hemat`, `kreator → satuan`, `toko → hemat`
 (alasan: kuliner & toko butuh unggahan rutin, kreator pesan sesuai kebutuhan).
 Order demo tetap **UK-ORD-8812** (status `in_progress`, paid) + draft + log.
 
-## 4. Skema JSON draft AI (poster — menggantikan skema website lama)
+## 4. Skema JSON konten poster (diisi editor manusia — bukan AI)
+
+Skema di bawah tetap dipakai, tetapi **isinya disusun editor lewat
+back-office** (`PUT /api/admin/orders/:id/poster`, `engine = 'manual'`) —
+tidak ada lagi Gemini maupun generator lokal.
 
 ```json
 {
@@ -92,23 +108,21 @@ Order demo tetap **UK-ORD-8812** (status `in_progress`, paid) + draft + log.
 ```
 
 - `points` **tepat 3** (menggantikan `features`); `faq` **dihapus** — pertanyaan
-  teknis digantikan transparansi paket (§2) yang berasal dari backend, bukan AI.
-- `heroSection` → `poster`. `validateDraftSchema` harus persis: tolak/fallback
-  bila salah satu field hilang atau `points.length !== 3`.
-- Brief input tidak berubah bentuk: `{templateId, brandName, tagline, description,
-  themeColor, ctaText, toneOfVoice}`. **Enum `themeColor` berubah** menjadi
-  `violet | navy | amber | emerald` (indigo digantikan violet) dengan pemetaan
-  hex (primary → accent): violet `#8b5cf6`→`#6d28d9`, navy `#3b4bd8`→`#2735a8`,
-  amber `#f59e0b`→`#b45309`, emerald `#10b981`→`#047857`. Kontras teks di atas
-  warna theme harus tetap lolos WCAG AA (pakai `--accent-ink` bila perlu).
-- `backend/src/lib/ai.ts`: `GEMINI_API_KEY` ada → `gemini-2.5-flash` + system
-  prompt skema poster di atas, parse JSON (toleransi fence), validasi, fallback
-  partial ke generator lokal; tanpa key → generator lokal deterministik yang
-  benar-benar memakai brief customer (konten poster promosi, bukan lorem).
-  Jangan pernah mengarang respons AI di client.
+  teknis digantikan transparansi paket (§2) yang berasal dari backend.
+- `heroSection` → `poster`. Validasi penyimpanan harus persis: tolak/fallback
+  bila salah satu field hilang atau `points.length !== 3`. Panjang teks tetap
+  divalidasi `LIMITS`/`requireCap` (batas 240/140/60/40) karena kini jadi
+  **input editor manusia** — tetap dipotong jujur, bukan dibiarkan mentah.
+- **Brief customer** berbentuk baru (kontrak WHATSAPP-FLOW, dikirim saat
+  `POST /api/orders`): `{merekLokasi, segmenTarget, suasanaMerek, aksiUtama,
+  nadaRekaman}`. Tidak ada lagi `brandName/tagline/description/themeColor/ctaText/
+  toneOfVoice` dan tidak ada `draftId`. Pemilihan warna tema & kontras pindah
+  ke editor back-office (bukan enum `themeColor` di form customer).
 - `backend/src/lib/render.ts` (`GET /api/export/[draftId]`) menghasilkan
   **HTML poster siap pakai** (rasio poster, headline besar, 3 poin, CTA, warna
   theme) — bukan halaman website lagi.
+- `backend/src/lib/ai.ts`, GeminiClient, `src/lib/draft.ts`, dan bucket
+  rate limit `drafts` **dihapus** — jangan menyentuhnya kembali.
 
 ## 5. API contract
 
@@ -118,9 +132,11 @@ Metode & bentuk response yang sudah ada di SPEC tetap berlaku, dengan penyesuaia
 |---|---|
 | `GET /api/templates` | item bertambah `recommendedPackage` |
 | **`GET /api/packages`** | **BARU** → `{packages: [{key,name,price,quota,etaGuarantee?...}]}` sesuai §2 |
-| `POST /api/drafts` | body brief sama; response `{draftId, content: Draft, engine}` — `content` memakai skema §4 |
-| `POST /api/orders` | body `{draftId, templateId, packageKey, contactName, contactWhatsapp, contactEmail}`; `packageKey` wajib salah satu dari §2 → `total_price` & `quota` diambil dari paket, `package_name` diisi nama tampilan. Response tetap `{order, orderNumber}` |
-| `GET /api/orders?number=` / `GET /api/orders/[id]` | response menjadi `{order, draft, drafts, logs, remaining}` (`drafts` = semua draft milik order — penting untuk kuota paket hemat) |
+| ~~`POST /api/drafts`~~ | **DIHAPUS** (AI dibuang total) → 404; bucket rate limit `drafts` ikut dihapus |
+| **`GET /api/contact`** | **BARU** → `{whatsappNumber, whatsappUrl, whatsappSupportUrl}` dari env `WHATSAPP_NUMBER` (placeholder default `6281234567890`, wajib diganti di produksi); `whatsappUrl` = `https://wa.me/<number>`, `whatsappSupportUrl` = `https://wa.me/<number>?text=<pesan serah terima>` |
+| `POST /api/orders` | **tanpa `draftId`**; body `{templateId, packageKey, brief:{merekLokasi,segmenTarget,suasanaMerek,aksiUtama,nadaRekaman}, contact:{name,whatsapp,email?}}`; `packageKey` wajib salah satu dari §2 → `total_price` & `quota` diambil dari paket, `package_name` diisi nama tampilan. Response `{data:{order, whatsappUrl}}` — `whatsappUrl` sudah terisi pesan berisi **nomor order, nama paket, ETA, brief**. Order dibuat status `draft`, `ai_draft_id = NULL`. Rate limit bucket `customerWrite` |
+| **`PUT /api/admin/orders/:id/poster`** | **BARU** (admin-only, `requireAdmin`) body `{content: PosterDraft}` → kolom `engine` diisi `'manual'`, audit-log `poster.edited`; setelah simpan status bisa dinaikkan lewat endpoint status yang sudah ada |
+| `GET /api/orders?number=` / `GET /api/orders/[id]` | response menjadi `{order, draft, drafts, logs, remaining}` (`drafts` = semua konten poster milik order — isi editor, penting untuk kuota paket hemat) |
 | **`POST /api/orders/[id]/briefs`** | **BARU** tambah brief poster dalam kuota. Body `{orderNumber, brief}`. 404 bila nomor salah, **400** bila `remaining <= 0` (pesan jelas: "Kuota paket sudah habis"), 429 sesuai rate limit tulis. Buat `ai_drafts` terhubung + `order_logs` `[BRIEF TAMBAHAN]` |
 | **`POST /api/orders/[id]/revision`** | **BARU** minta revisi. Body `{orderNumber, message}`. Validasi panjang via `LIMITS`/`requireCap`, `sanitizeText`. Tulis `order_logs` `[REVISI] ...` (status tidak berubah). Hanya saat status `paid`/`in_progress`/`review` → selain itu 400 |
 | `PATCH /api/orders/[id]` | tetap, **wajib** `isAdminAuthenticated()` |
@@ -128,8 +144,8 @@ Metode & bentuk response yang sudah ada di SPEC tetap berlaku, dengan penyesuaia
 | `GET /api/export/[draftId]` | tetap (poster HTML) |
 
 - Endpoint `briefs` & `revision` divalidasi dengan **nomor order** (pola tracking
-  yang sama dengan `GET /api/orders?number=`) dan kena rate limit tulis pelanggan
-  (boleh memakai bucket baru, mis. 10/menit, yang didefinisikan di satu tempat).
+  yang sama dengan `GET /api/orders?number=`) dan kena rate limit tulis
+  pelanggan bucket `customerWrite` (10/menit per IP, dipakai juga `POST /api/orders`).
 - Semua error `{error: string}` + kode jujur (400/404/429/500).
 - Gate admin, verifikasi token (bukan keberadaan cookie), `LIMITS`/`sanitizeText`/
   `requireCap`, normalisasi WA/email, `nextOrderNumberSafe`, header keamanan di
@@ -142,14 +158,20 @@ Metode & bentuk response yang sudah ada di SPEC tetap berlaku, dengan penyesuaia
    filter kategori `Semua | Kuliner | Kreator | Toko Online` (harus berfungsi),
    tiap kartu menampilkan harga satuan + `recommendedPackage`, section **harga 2
    paket** (data dari `GET /api/packages`, termasuk ETA & garansi), ajakan
-   "Kustomisasi dengan AI" → `/customizer/[templateId]`.
-2. `/customizer/[templateId]` — dual pane: form brief kiri, **live preview poster
-   kanan** yang benar-benar merender draft (badge/headline/subheadline/CTA + 3 poin,
-   rasio poster ± 4:5), badge engine `gemini`/`local` (jangan bohongi user),
-   loading/error/retry. **Checkout memakai kartu paket dari `GET /api/packages`**
-   — ETA + garansi tampil di sini sebelum tombol bayar. Submit `packageKey`.
-3. `/orders` — lacak nomor `UK-ORD-XXXX` tanpa login; tampil ringkasan paket,
-   sisa kuota (`remaining`), dan status.
+   kustomisasi poster → `/customizer/[templateId]`. Tombol kontak WhatsApp
+   memakai `GET /api/contact` (jangan hardcode nomor).
+2. `/customizer/[templateId]` — dual pane: form **brief + kontak** kiri (tanpa
+   tombol "Generate", tanpa badge engine), **live preview poster** kanan
+   (badge/headline/subheadline/CTA + 3 poin, rasio poster ± 4:5) yang merender
+   konten yang ada, loading/error/retry. **Checkout memakai kartu paket dari
+   `GET /api/packages`** — ETA + garansi tampil sebelum konfirmasi. Submit
+   `packageKey` + `brief` + `contact` ke `POST /api/orders`, lalu tampilkan
+   nomor order + tombol **"Buka WhatsApp"** (wa.me dari respons) dan
+   **"Cek Status Pesanan"** (→ `/orders?number=...`).
+3. `/orders` — lacak nomor `UK-ORD-XXXX` tanpa login (**lookup otomatis saat
+   datang dari `?number=`**); tampil ringkasan paket, sisa kuota (`remaining`),
+   status, serta tombol **"Chat via WhatsApp"** di tiap tahap (URL dari
+   `GET /api/contact`). Revisi tetap di web; jalur utama serah terima = chat WA.
 4. `/orders/[id]` — stepper 5 tahap (`draft→paid→in_progress→review→completed`)
    dengan **timestamp dari `order_logs`**, blok **estimasi & garansi sesuai
    paket** (transparansi), daftar draft (kuota), **tombol "Minta Revisi"**
@@ -167,11 +189,16 @@ Metode & bentuk response yang sudah ada di SPEC tetap berlaku, dengan penyesuaia
 1. `/admin` — Kanban 4 kolom tetap (Backlog, In Progress, Need Review, Completed;
    backlog = `draft`+`paid`), pindah kartu via PATCH, jumlah per kolom, statistik.
    Kartu menampilkan paket + sisa kuota.
-2. `/admin/orders/[id]` — brief asli + **payload JSON draft** (rapi), preview poster
-   (boleh memakai ulang komponen preview milik shop), **daftar semua draft/brief**
-   termasuk brief tambahan, **riwayat `order_logs` lengkap dengan entri `[REVISI]`
-   dan `[BRIEF TAMBAHAN]`**, update status + catatan dev, form delivery
-   (live URL, zip URL, catatan) → PUT delivery, tombol Export Clean Source Code.
+2. `/admin/orders/[id]` — **Editor Konten Poster**: form field yang sama dengan
+   konten poster (badge, headline, subheadline, CTA, 3 poin, warna, contrast)
+   disimpan via **`PUT /api/admin/orders/:id/poster`** (`engine = 'manual'`,
+   audit-log `poster.edited`), lalu preview memakai komponen preview poster yang
+   ada; brief asli customer (bukan hasil AI) tetap tampil. **Tombol "Chat ke
+   Customer"** (wa.me ke `contact_whatsapp` order) di header detail. **Daftar
+   semua konten poster/brief** termasuk brief tambahan, **riwayat `order_logs`
+   lengkap dengan entri `[REVISI]` dan `[BRIEF TAMBAHAN]`**, update status +
+   catatan dev, form delivery (live URL, zip URL, catatan) → PUT delivery,
+   tombol Export Clean Source Code.
 3. Gate: cookie `admin_session` via `POST /api/admin/login`
    (`ADMIN_PASSWORD`, default `admin123`), middleware + cek di `frontend/middleware.ts`,
    halaman `/admin/login`. Cookie invalid dihapus saat redirect.
@@ -213,13 +240,19 @@ poster untuk UMKM. `NEXT_PUBLIC_SITE_URL` tetap.
   (SELALU `backend/data/app.db`, bukan `frontend/data/app.db`).
 - `docs/DEPLOY.md` hanya disentuh bila ada kata kunci brand yang menyesatkan.
 - `PLAN.md` & `index.html`: **jangan diubah**.
-- Uji di `frontend/tests/*.py` disesuaikan dengan kontrak baru (skema draft,
-  harga, endpoint baru, teks brand). Perubahan tes harus bisa dipertanggung-
-  jawabkan sebagai kontrak berubah — jangan melemahkan assertion supaya "lolos".
-- Verifikasi wajib sebelum lapor: `cd frontend && npx tsc --noEmit && npx eslint src && npm run build`,
-  backend `npx tsc`, lalu jalankan suite:
-  `bash /home/rochwidias/.hermes/cache/scratch/verify-linux.sh all`
-  (interpreter Python: `/home/rochwidias/.hermes/cache/scratch/venv-pw/bin/python`).
+- Uji di `frontend/tests/*.py` disesuaikan dengan kontrak baru (konten poster,
+  harga, endpoint baru, teks brand, alur WhatsApp). Perubahan tes harus bisa
+  dipertanggung-jawabkan sebagai kontrak berubah — jangan melemahkan assertion
+  supaya "lolos".
+- Verifikasi wajib sebelum lapor (jalankan **dengan server sendiri**, lalu
+  matikan lagi):
+  `cd frontend && npx tsc --noEmit && npx eslint src && npm run build`,
+  backend `npx tsc`, lalu suite API+keamanan:
+  `python3 -m pytest frontend/tests/test_api.py frontend/tests/test_security.py`
+  (env: `BASE_URL=http://localhost:<port-next>`, `BACKEND_URL=http://localhost:<port-backend>`;
+  interpreter Python: `/home/rochwidias/.hermes/cache/scratch/venv-pw/bin/python`).
+  Uji E2E/fitur: `bash frontend/tests/verify.sh` (atau jalankan
+  `test_e2e.py`/`test_features.py` satu per satu dengan `BASE_URL`).
 
 ## 11. Pemilikan file (anti-tabrakan)
 
@@ -247,12 +280,12 @@ wajib dibereskan dan **diverifikasi ulang** (bukan hanya ditulis ulang).
   `clientKey` memakai entri pertama XFF yang dikendalikan klien). Ganti ke `req.ip`
   (Express sudah menghitungnya sesuai `trust proxy`) — buktikan: 10 percobaan login
   salah dengan XFF unik tiap request tetap kena 429 pada percobaan ke-7.
-- **`validateDraftSchema` tidak menerapkan pemotongan `MAX_TEXT`** ke objek yang
-  disimpan (hasil `requireString` dibuang di call site). Buat normalisasi yang
-  memakai hasil potongan, dan pakai hasilnya saat menyimpan draft.
-- **`draftId` bisa dipakai ulang untuk checkout kedua** → order pertama kehilangan
-  draft (`db.ts` `attachDraftToOrder` + `services/orders.ts`). Tolak dengan `400`
-  bila draft sudah terpasang di order lain.
+- **Penyimpanan konten poster tidak menerapkan pemotongan `MAX_TEXT`** ke objek
+  yang disimpan (hasil `requireString` dibuang di call site). Buat normalisasi
+  yang memakai hasil potongan, dan pakai hasilnya saat menyimpan (kini lewat
+  `PUT /api/admin/orders/:id/poster`, tetap berlaku).
+- ~~`draftId` bisa dipakai ulang untuk checkout kedua~~ — **tidak relevan lagi**:
+  checkout tidak memakai `draftId` (AI & `POST /api/drafts` dibuang).
 - **429 wajib mengirim `retryAfterSeconds` (JSON) + header `Retry-After`**
   (SPEC menagih ini, implementasi lama hanya menyelipkan detik di teks error).
 - Fallback nomor order `UK-ORD-${Date.now().slice(-6)}` → pastikan 4 digit.

@@ -25,8 +25,9 @@ Env penting yang dibaca frontend (Vercel):
 
 Env backend (Render) diatur otomatis oleh `render.yaml`:
 
-- `NODE_ENV=production`, `DB_DIR=/var/data` (disk persistent), dan dua env yang
-  diisi manual: `FRONTEND_ORIGIN` (URL Vercel) + `ADMIN_PASSWORD`.
+- `NODE_ENV=production`, `DB_DIR=/var/data` (disk persistent), dan tiga env yang
+  diisi manual: `FRONTEND_ORIGIN` (URL Vercel), `ADMIN_PASSWORD`, dan
+  **`WHATSAPP_NUMBER`**.
 
 ## Langkah A — Deploy backend di Render
 
@@ -39,9 +40,9 @@ Env backend (Render) diatur otomatis oleh `render.yaml`:
 5. Setelah service hidup, salin URL publiknya:
    `https://<nama>-<hash>.onrender.com` (halaman service di dashboard).
 
-Catatan: env `FRONTEND_ORIGIN` & `ADMIN_PASSWORD` ditandai `sync: false`
-(sengaja tidak diberi nilai default). Deploy tetap berhasil tanpa keduanya;
-Anda mengisinya di Langkah C.
+Catatan: env `FRONTEND_ORIGIN`, `ADMIN_PASSWORD` & `WHATSAPP_NUMBER` ditandai
+`sync: false` (sengaja tidak diberi nilai default). Deploy tetap berhasil tanpa
+ketiganya; Anda mengisinya di Langkah C.
 
 ## Langkah B — Deploy frontend di Vercel
 
@@ -74,19 +75,32 @@ Anda mengisinya di Langkah C.
    `ADMIN_PASSWORD` cukup diset **di Render saja** — tidak perlu disalin ke
    Vercel. Pastikan `BACKEND_ORIGIN` di Vercel menunjuk service ini, karena
    gerbang `/admin` bergantung padanya.
-4. Simpan. Render otomatis **redeploy**. Tunggu service kembali hidup
+4. `WHATSAPP_NUMBER` = nomor WhatsApp bisnis Anda dalam format internasional
+   **tanpa `+` dan tanpa spasi**, contoh `6281234567890`. Dipakai endpoint
+   `GET /api/contact` untuk merakit link `https://wa.me/<number>` (tombol
+   "Buka WhatsApp", "Chat via WhatsApp", "Chat ke Customer"). Bila dibiarkan
+   kosong, backend memakai placeholder `6281234567890` — **wajib diganti**
+   sebelum produksi supaya pesanan masuk ke nomor yang benar.
+5. Simpan. Render otomatis **redeploy**. Tunggu service kembali hidup
    (perhatikan **Logs**: `[backend] Aether Creative API berjalan di ...`).
 
 ## Langkah D — Verifikasi
 
-1. Buka URL Vercel (root `/`) -> katalog menampilkan **3 kartu template**
-   (Artisan Cafe, Creative Portfolio, DTC Store) yang diambil dari backend.
+1. Buka URL Vercel (root `/`) -> katalog menampilkan **3 kartu poster**
+   (Poster Promo Kuliner, Poster Kreator & Portofolio, Poster Toko Online) yang
+   diambil dari backend.
 2. Buka `/admin/login` -> login dengan `ADMIN_PASSWORD` (default `admin123`).
-   Setelah login, kanban admin tampil.
+   Setelah login, kanban admin tampil; di detail order ada **Editor Konten
+   Poster** (simpan lewat `PUT /api/admin/orders/:id/poster`) dan tombol
+   **Chat ke Customer**.
 3. Di `/orders`, lacak nomor order demo **UK-ORD-8812** -> status `in_progress`,
-   draft AI tersimpan.
+   konten poster tersimpan (diisi editor, `engine = manual`).
+4. Isi brief + kontak di `/customizer/<templateId>` -> **Kirim Pesanan via
+   WhatsApp** -> muncul nomor order + tombol **Buka WhatsApp** (link `wa.me`
+   berisi nomor order, paket, ETA, brief). Cek `GET /api/contact` mengembalikan
+   nomor dari `WHATSAPP_NUMBER`, bukan placeholder.
 
-Kalau ketiganya berjalan, deploy sukses.
+Kalau semuanya berjalan, deploy sukses.
 
 ## Catatan penting
 
@@ -113,6 +127,10 @@ Kalau ketiganya berjalan, deploy sukses.
   Vercel, bukan http.
 - **Login ditolak terus**: cek `ADMIN_PASSWORD` di Render. Bila kosong, pakai
   default `admin123`.
+- **Tombol WhatsApp mengarah ke nomor asing (placeholder `6281234567890`)**:
+  `WHATSAPP_NUMBER` belum diset di Render. Isi di Environment -> Environment
+  Variables (format internasional tanpa `+`), lalu tunggu redeploy; cek
+  `GET /api/contact` menampilkan nomor Anda.
 - **Render service gagal start**: cek Logs — biasanya `npm ci` gagal karena
   `package-lock.json` tidak ada di `backend/` (pastikan file lock ter-commit),
   atau `PORT` bentrok (Render sudah supply `PORT`, jangan override manual).

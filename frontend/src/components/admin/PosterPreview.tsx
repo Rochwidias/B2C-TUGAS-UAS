@@ -146,7 +146,7 @@ export default function PosterPreview({ content }: { content: Draft }) {
                     className="flex gap-2 border-l-2 pl-2"
                     style={{ borderColor: view.primary }}
                   >
-                    {/* Ikon berasal dari data AI customer: teks isi, bukan ikon antarmuka. */}
+                    {/* Ikon berasal dari brief customer: teks isi, bukan ikon antarmuka. */}
                     <span aria-hidden="true" className="shrink-0 font-mono text-[10px] text-ink-soft">
                       {point.icon}
                     </span>

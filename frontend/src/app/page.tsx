@@ -26,8 +26,8 @@ const STEPS = [
   {
     n: '02',
     title: 'Editor validasi',
-    desc: 'Server menyusun draft poster: badge, headline, subheadline, tombol ajakan, dan tiga poin. Editor memeriksa ketepatan brief sebelum dikerjakan.',
-    meta: 'Badge engine menyebut asal konten apa adanya',
+    desc: 'Editor manusia menyusun konten poster dari brief Anda: badge, headline, subheadline, tombol ajakan, dan tiga poin. Anda menerima konfirmasi lewat WhatsApp.',
+    meta: 'Konfirmasi pesanan & serah terima lewat WhatsApp',
   },
   {
     n: '03',
@@ -64,7 +64,7 @@ export default function Home() {
 
               <p className="mt-6 max-w-xl text-[15px] leading-relaxed text-ink-soft sm:text-base">
                 Cepat, terjangkau, sesuai karakter usaha, dan lebih tepercaya. Anda mengirim brief
-                merek, editor memvalidasi draftnya, lalu poster siap pakai dikirim beserta estimasi
+                merek, editor menyusun posternya, lalu poster siap pakai dikirim beserta estimasi
                 waktu kerja dan garansi revisi — semuanya ditampilkan sebelum Anda membayar.
               </p>
 

@@ -1,6 +1,6 @@
 // Validasi skema draft ala JSON-Schema tanpa dependency tambahan.
-// Dipakai untuk output Gemini DAN generator lokal — keduanya wajib lolos
-// sebelum disimpan, supaya UI bisa mengandalkan bentuk data.
+// Dipakai untuk konten poster yang disimpan editor back-office lewat
+// PUT /api/admin/orders/:id/poster (sebelumnya juga output Gemini).
 // Skema poster: docs/REDESIGN.md §4 (brand/theme/poster + points tepat 3).
 
 import type { Draft, DraftPoint, DraftPoster } from '../types';
@@ -29,12 +29,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Baca string wajib: laporkan bila hilang/kosong, DAN potong ke `MAX_TEXT`.
  * Nilai potongan inilah yang dipakai saat menyimpan draft (audit §12 A3) —
  * hasil `requireString` tidak boleh dibuang di call site.
+ * `allowEmpty` dipakai editor back-office: kerangka poster buatan
+ * `scaffoldPoster` sengaja berisi teks kosong sampai editor mengisinya.
  */
 function readString(
   source: Record<string, unknown>,
   key: string,
   path: string,
   fail: IssueSink,
+  allowEmpty = false,
 ): string {
   const value = source[key];
   const child = `${path}.${key}`;
@@ -44,7 +47,7 @@ function readString(
   }
   const trimmed = value.trim();
   if (trimmed.length === 0) {
-    fail(child, 'tidak boleh kosong');
+    if (!allowEmpty) fail(child, 'tidak boleh kosong');
     return '';
   }
   if (trimmed.length > MAX_TEXT) {
@@ -81,14 +84,27 @@ export interface NormalizedDraft {
   draft: Draft | null;
 }
 
+export interface NormalizeOptions {
+  /**
+   * Izinkan teks kosong. Dipakai `PUT /api/admin/orders/:id/poster`: kerangka
+   * poster (scaffold) sengaja kosong sampai editor mengisi, jadi round-trip
+   * konten scaffold harus diterima. Warna theme tetap wajib terisi (preview
+   * dan export butuh hex valid).
+   */
+  allowEmpty?: boolean;
+}
+
 /**
  * Validasi + normalisasi: mengembalikan daftar pelanggaran DAN objek draft
  * yang sudah dipotong `MAX_TEXT`. `issues` kosong = draft valid dan `draft`
  * siap disimpan apa adanya.
  */
-export function normalizeDraftSchema(value: unknown): NormalizedDraft {
+export function normalizeDraftSchema(value: unknown, options: NormalizeOptions = {}): NormalizedDraft {
+  const allowEmpty = options.allowEmpty === true;
   const issues: SchemaIssue[] = [];
   const fail: IssueSink = (path, message) => issues.push({ path, message });
+  const read = (source: Record<string, unknown>, key: string, path: string): string =>
+    readString(source, key, path, fail, allowEmpty);
 
   if (!isRecord(value)) return { issues: [{ path: '$', message: 'draft harus berupa object JSON' }], draft: null };
 
@@ -97,23 +113,24 @@ export function normalizeDraftSchema(value: unknown): NormalizedDraft {
   }
 
   const brand = isRecord(value.brand) ? value.brand : {};
-  const brandName = readString(brand, 'name', '$.brand', fail);
-  const brandTagline = readString(brand, 'tagline', '$.brand', fail);
-  const brandAbout = readString(brand, 'about', '$.brand', fail);
+  const brandName = read(brand, 'name', '$.brand');
+  const brandTagline = read(brand, 'tagline', '$.brand');
+  const brandAbout = read(brand, 'about', '$.brand');
 
   const theme = isRecord(value.theme) ? value.theme : {};
+  // Warna theme selalu wajib (tanpa allowEmpty) — renderer & export butuh hex.
   const primaryColor = readString(theme, 'primaryColor', '$.theme', fail);
   if (primaryColor && !HEX_RE.test(primaryColor)) fail('$.theme.primaryColor', 'harus berupa hex (#RRGGBB)');
   const accentColor = readString(theme, 'accentColor', '$.theme', fail);
   if (accentColor && !HEX_RE.test(accentColor)) fail('$.theme.accentColor', 'harus berupa hex (#RRGGBB)');
-  const fontPairing = readString(theme, 'fontPairing', '$.theme', fail);
+  const fontPairing = read(theme, 'fontPairing', '$.theme');
 
   const posterSource = isRecord(value.poster) ? value.poster : {};
   const poster: DraftPoster = {
-    badge: readString(posterSource, 'badge', '$.poster', fail),
-    headline: readString(posterSource, 'headline', '$.poster', fail),
-    subheadline: readString(posterSource, 'subheadline', '$.poster', fail),
-    ctaText: readString(posterSource, 'ctaText', '$.poster', fail),
+    badge: read(posterSource, 'badge', '$.poster'),
+    headline: read(posterSource, 'headline', '$.poster'),
+    subheadline: read(posterSource, 'subheadline', '$.poster'),
+    ctaText: read(posterSource, 'ctaText', '$.poster'),
   };
 
   // points menggantikan `features` dan wajib tepat 3 (§4).
@@ -128,9 +145,9 @@ export function normalizeDraftSchema(value: unknown): NormalizedDraft {
         return;
       }
       points.push({
-        icon: readString(item, 'icon', path, fail),
-        title: readString(item, 'title', path, fail),
-        description: readString(item, 'description', path, fail),
+        icon: read(item, 'icon', path),
+        title: read(item, 'title', path),
+        description: read(item, 'description', path),
       });
     });
 
@@ -158,4 +175,37 @@ export function normalizeDraftSchema(value: unknown): NormalizedDraft {
  */
 export function validateDraftSchema(value: unknown): SchemaIssue[] {
   return normalizeDraftSchema(value).issues;
+}
+
+// ---------------------------------------------------------------------------
+// Batas panjang per medan teks poster (kontrak WHATSAPP-FLOW: 240/140/60/40).
+// Nilai yang sama dulu hanya dipakai generator; sekarang menjadi validasi input
+// editor manusia lewat PUT /api/admin/orders/:id/poster.
+// ---------------------------------------------------------------------------
+export const POSTER_LIMITS = {
+  /** Deskripsi tiap poin: 240 karakter. */
+  pointDescription: 240,
+  /** Tagline brand: 140 karakter. */
+  tagline: 140,
+  /** Headline poster: 60 karakter. */
+  headline: 60,
+  /** Teks tombol CTA: 40 karakter. */
+  ctaText: 40,
+} as const;
+
+/** Pelanggaran batas panjang (kosong = lolos). `draft` hasil `normalizeDraftSchema`. */
+export function validatePosterLimits(draft: Draft): SchemaIssue[] {
+  const issues: SchemaIssue[] = [];
+  const check = (path: string, value: string, max: number): void => {
+    if (value.length > max) issues.push({ path, message: `maksimal ${max} karakter` });
+  };
+
+  check('$.brand.tagline', draft.brand.tagline, POSTER_LIMITS.tagline);
+  check('$.poster.headline', draft.poster.headline, POSTER_LIMITS.headline);
+  check('$.poster.ctaText', draft.poster.ctaText, POSTER_LIMITS.ctaText);
+  draft.points.forEach((point, index) => {
+    check(`$.points[${index}].description`, point.description, POSTER_LIMITS.pointDescription);
+  });
+
+  return issues;
 }

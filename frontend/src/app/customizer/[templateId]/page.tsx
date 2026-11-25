@@ -61,7 +61,7 @@ export async function generateMetadata({
   const name = template?.name ?? 'Contoh poster tidak ditemukan';
   return {
     title: `${name} — Customizer Poster`,
-    description: `Isi brief merek untuk ${name}: nama brand, tagline, deskripsi, warna aksen, teks tombol, dan nada penulisan. AI menyusun draft poster yang divalidasi editor sebelum dikirim.`,
+    description: `Isi brief merek untuk ${name}: nama brand, tagline, deskripsi, warna aksen, teks tombol, dan nada penulisan. Kirim pesanan via WhatsApp, lalu editor menyusun poster Anda sebelum diserahkan.`,
     alternates: { canonical: `/customizer/${templateId}` },
   };
 }

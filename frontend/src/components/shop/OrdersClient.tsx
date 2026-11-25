@@ -7,6 +7,7 @@ import { Footer } from '@/components/shop/Footer';
 import { Header } from '@/components/shop/Header';
 import { LastOrderHint } from '@/components/shop/LastOrderHint';
 import { Stepper } from '@/components/shop/Stepper';
+import { WhatsAppChat } from '@/components/shop/WhatsAppChat';
 import {
   STATUS_STEPS,
   type OrderResponse,
@@ -234,8 +235,9 @@ function TrackForm({ onTracked }: { onTracked: (entry: TrackedOrder) => void }) 
           <div className="border border-dashed border-rule bg-surface p-6">
             <p className="text-[15px] font-semibold leading-snug">Belum ada pencarian</p>
             <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-soft">
-              Nomor pesanan dikirim ke WhatsApp Anda setelah checkout. Untuk mencoba alurnya, pakai
-              nomor demo <span className="font-mono text-ink">UK-ORD-8812</span>.
+              Nomor pesanan tampil di layar setelah pesanan dikirim, dan pesan WhatsApp terisi
+              otomatis saat Anda membukanya. Untuk mencoba alurnya, pakai nomor demo{' '}
+              <span className="font-mono text-ink">UK-ORD-8812</span>.
             </p>
             <div className="mt-5 border-t border-rule pt-4">
               <LastOrderHint onUse={useLastOrder} />
@@ -282,6 +284,10 @@ function TrackForm({ onTracked }: { onTracked: (entry: TrackedOrder) => void }) 
                     Sisa kuota: {state.result.remaining} poster
                   </span>
                 )}
+                <WhatsAppChat
+                  status={state.result.order.status}
+                  orderNumber={state.result.order.order_number}
+                />
               </div>
             </div>
 

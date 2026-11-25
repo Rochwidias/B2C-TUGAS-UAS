@@ -3,7 +3,6 @@
 // bergantung pada struktur internal src/lib milik Agent-BACKEND.
 
 export type ThemeColorKey = 'violet' | 'navy' | 'amber' | 'emerald';
-export type AIEngine = 'gemini' | 'local';
 export type OrderStatus = 'draft' | 'paid' | 'in_progress' | 'review' | 'completed';
 
 export interface Template {
@@ -46,10 +45,31 @@ export interface Brief {
   toneOfVoice: string;
 }
 
-export interface DraftResponse {
-  draftId: string;
-  content: Draft;
-  engine: AIEngine;
+/**
+ * Body POST /api/orders (docs/WHATSAPP-FLOW.md §Baru). Medan bentuk-form lama
+ * tetap ikut dikirim agar ringkasan brief di back-office tetap terbaca, sementara
+ * medan bernama kontrak (`merekLokasi`, `segmenTarget`, ...) diisi dari form.
+ */
+export interface OrderBriefPayload extends Brief {
+  merekLokasi?: string;
+  segmenTarget?: string;
+  suasanaMerek?: string;
+  aksiUtama?: string;
+  nadaRekaman?: string;
+}
+
+/** Kontak pelanggan — dikirim nested, tanpa prefiks `contact`. */
+export interface OrderContact {
+  name: string;
+  whatsapp: string;
+  email?: string;
+}
+
+/** Hasil GET /api/contact: nomor WA resmi dari env `WHATSAPP_NUMBER`. */
+export interface ContactInfo {
+  whatsappNumber: string;
+  whatsappUrl: string;
+  whatsappSupportUrl?: string | null;
 }
 
 export interface Order {
@@ -104,7 +124,18 @@ export interface OrderResponse {
 
 export interface OrderCreatedResponse {
   order: Order;
-  orderNumber: string;
+  /** Kontrak baru membungkus respons dalam `{data: {order, whatsappUrl}}`. */
+  whatsappUrl?: string;
+  /** Medan lama; bila absen, nomor diambil dari `order.order_number`. */
+  orderNumber?: string;
+}
+
+/**
+ * Buka body respons apa pun: kontrak baru membungkus payload dalam `data`,
+ * sedangkan route lama mengirimnya di level teratas.
+ */
+export function unwrapData<T extends object>(body: T & { data?: T }): T {
+  return body.data ?? body;
 }
 
 /** Semua route API mengembalikan `{error}` pada status non-2xx. */
@@ -140,6 +171,25 @@ export const STATUS_STEPS: { key: OrderStatus; label: string; hint: string }[] =
   { key: 'review', label: 'Review editor', hint: 'Cek mutu & ketepatan brief' },
   { key: 'completed', label: 'Selesai', hint: 'Poster siap pakai' },
 ];
+
+/**
+ * Pembuka chat WhatsApp yang disesuaikan dengan tahap pesanan — dipakai
+ * tombol "Chat via WhatsApp" di /orders dan LastOrderHint.
+ */
+export const WHATSAPP_STAGE_HINTS: Record<OrderStatus, string> = {
+  draft: 'Brief diterima — tanyakan posisi antrean editor.',
+  paid: 'Konfirmasi pembayaran dan kirim bukti transfer.',
+  in_progress: 'Koordinasi detail pengerjaan poster.',
+  review: 'Bahas hasil review dan minta penyesuaian.',
+  completed: 'Serah terima file final dan konfirmasi selesai.',
+};
+
+export function whatsappStageHint(status: string | null | undefined): string {
+  const key = (status ?? '').trim();
+  if (!key) return 'Konfirmasi, revisi, dan serah terima berjalan di chat WhatsApp.';
+  return WHATSAPP_STAGE_HINTS[key as OrderStatus] ??
+    'Konfirmasi, revisi, dan serah terima berjalan di chat WhatsApp.';
+}
 
 export const CATEGORY_LABELS: Record<string, string> = {
   kuliner: 'Kuliner',

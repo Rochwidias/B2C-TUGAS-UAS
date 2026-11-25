@@ -65,7 +65,7 @@ export function TemplateCard({
             </p>
           )}
           <span className="inline-flex min-h-11 items-center justify-between gap-2 border border-rule bg-paper px-3 text-[13px] font-medium transition-colors group-hover:border-ink group-hover:bg-ink group-hover:text-paper">
-            <span>Kustomisasi dengan AI</span>
+            <span>Kustomisasi &amp; pesan</span>
             <span aria-hidden="true">&rarr;</span>
           </span>
         </div>

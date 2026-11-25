@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Verifikasi menyeluruh CraftAI Studio dalam satu perintah.
+# Verifikasi menyeluruh Aether Creative dalam satu perintah (alur WhatsApp,
+# tanpa AI — kontrak docs/WHATSAPP-FLOW.md).
 #
 #   cd frontend && bash tests/verify.sh
 #

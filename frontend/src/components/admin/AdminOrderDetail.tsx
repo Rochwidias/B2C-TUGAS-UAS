@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import AdminShell from '@/components/admin/AdminShell';
 import JsonBlock from '@/components/admin/JsonBlock';
-import PosterPreview from '@/components/admin/PosterPreview';
+import PosterEditor from '@/components/admin/PosterEditor';
 import StatusBadge from '@/components/admin/StatusBadge';
 import StatusUpdateForm from '@/components/admin/StatusUpdateForm';
 import DeliveryForm from '@/components/admin/DeliveryForm';
@@ -248,6 +248,11 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
   const brief = primary?.input_prompt_data ?? null;
   const content = selected?.ai_generated_content ?? null;
 
+  // Tautan Chat ke Customer: wa.me ke contact_whatsapp order dengan pesan
+  // pembuka berisi nomor order. Tanpa nomor, tombol tidak dirender.
+  const digits = (order.contact_whatsapp ?? '').replace(/[^0-9]/g, '');
+  const customerGreeting = `Halo ${order.contact_name || 'kak'}, saya dari Aether Creative ingin menanyakan pesanan ${order.order_number}.`;
+
   const quotaBase = quotaOf(order, drafts.length);
   const quotaInfo: QuotaInfo = { ...quotaBase, remaining: positiveInt(data.remaining) ?? quotaBase.remaining };
   const column = columnOfStatus(order.status);
@@ -380,6 +385,17 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
             Dibuat {formatDate(order.created_at)}
           </p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+            {digits ? (
+              <a
+                href={`https://wa.me/${digits}?text=${encodeURIComponent(customerGreeting)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-h-11 items-center gap-1.5 border border-ink bg-accent px-3 text-[11.5px] font-semibold text-accent-ink transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_0_var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                Chat ke Customer
+                <span aria-hidden="true">&nearr;</span>
+              </a>
+            ) : null}
             <span className="font-mono text-[10px] tracking-[0.14em] text-ink-soft uppercase">
               Live
             </span>
@@ -431,45 +447,16 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
           ) : null}
         </section>
 
-        {/* Draft AI: pratinjau poster + tombol ekspor. */}
-        <section
-          aria-labelledby="draft-ai"
-          className="flex min-w-0 flex-col border border-rule bg-surface"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule px-3 py-2">
-            <h2
-              id="draft-ai"
-              className="flex items-baseline gap-2 text-xs font-semibold tracking-tight text-ink"
-            >
-              Pratinjau poster
-              <span aria-hidden="true" className="font-mono text-[10px] font-normal text-ink-soft">
-                02
-              </span>
-            </h2>
-            {selected ? (
-              <a
-                href={`${API_BASE}/api/export/${selected.id}`}
-                download
-                aria-label={`Export Clean Source Code untuk draft ${selected.id.slice(0, 8)}`}
-                className="flex min-h-11 items-center border border-ink bg-ink px-3 text-[11.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                Export Clean Source Code
-              </a>
-            ) : null}
-          </div>
-
-          {content ? (
-            <div className="flex-1 p-3">
-              <PosterPreview content={content} />
-            </div>
-          ) : (
-            <div className="px-3 py-4">
-              <p className="text-[11.5px] leading-relaxed text-ink-soft">
-                Draft AI belum tersedia untuk order ini. Buat draft lewat halaman kustomisasi sebelum
-                mengekspor source code.
-              </p>
-            </div>
-          )}
+        {/* Editor Konten Poster: satu-satunya tempat isi poster diubah. AI sudah
+            ditarik dari alur — kolom disusun manual dan disimpan lewat
+            PUT /api/admin/orders/[id]/poster. */}
+        <section aria-labelledby="editor-poster" className="min-w-0">
+          <PosterEditor
+            orderId={orderId}
+            content={content}
+            brief={brief}
+            exportHref={selected ? `${API_BASE}/api/export/${selected.id}` : null}
+          />
         </section>
       </div>
 
@@ -556,11 +543,11 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
       </section>
 
       {/* Payload mentah selalu tersedia: admin butuh melihat persis apa yang
-          dikembalikan API, termasuk saat draft AI belum digenerate. */}
+          dikembalikan API, termasuk saat konten poster belum pernah diedit. */}
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <JsonBlock
           value={content ?? { order, draft: null }}
-          label={content ? 'Payload JSON draft AI' : 'Payload API order (draft belum ada)'}
+          label={content ? 'Payload JSON konten poster' : 'Payload API order (konten belum ada)'}
         />
         {selected?.input_prompt_data ? (
           <JsonBlock value={selected.input_prompt_data} label="Brief input (input_prompt_data)" />

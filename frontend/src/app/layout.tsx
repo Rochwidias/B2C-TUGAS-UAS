@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     template: "%s | Aether Creative",
   },
   description:
-    "Platform pembuatan poster untuk membantu UMKM lebih tepercaya: kirim brief merek, editor memvalidasi draft, lalu terima poster siap pakai. Cepat, terjangkau, dan sesuai karakter usaha.",
+    "Platform pembuatan poster untuk membantu UMKM lebih tepercaya: kirim brief merek, editor menyusun posternya, lalu terima poster siap pakai lewat WhatsApp. Cepat, terjangkau, dan sesuai karakter usaha.",
   applicationName: "Aether Creative",
   keywords: [
     "pembuatan poster UMKM",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     "poster promosi kuliner",
     "poster toko online",
     "poster kreator",
-    "poster AI",
+    "pemesanan poster WhatsApp",
     "poster siap pakai",
   ],
   authors: [{ name: "Aether Creative" }],
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
     siteName: "Aether Creative",
     title: "Aether Creative | Platform Pembuatan Poster untuk UMKM",
     description:
-      "Cepat, terjangkau, sesuai karakter usaha, dan lebih tepercaya. Brief merek menjadi draft yang divalidasi editor, lalu poster siap pakai.",
+      "Cepat, terjangkau, sesuai karakter usaha, dan lebih tepercaya. Brief merek disusun editor menjadi poster siap pakai, konfirmasinya lewat WhatsApp.",
   },
   twitter: {
     card: "summary_large_image",

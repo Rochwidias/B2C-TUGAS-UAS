@@ -9,7 +9,7 @@ import cookieParser from 'cookie-parser';
 
 import templatesRouter from './routes/templates';
 import packagesRouter from './routes/packages';
-import draftsRouter from './routes/drafts';
+import contactRouter from './routes/contact';
 import ordersRouter from './routes/orders';
 import deliveryRouter from './routes/delivery';
 import adminRouter from './routes/admin';
@@ -81,7 +81,7 @@ getDb();
 
 app.use(templatesRouter);
 app.use(packagesRouter);
-app.use(draftsRouter);
+app.use(contactRouter);
 app.use(ordersRouter);
 app.use(deliveryRouter);
 app.use(adminRouter);

@@ -7,11 +7,13 @@ import {
   adminPassword,
   isAdminAuthenticated,
   issueAdminToken,
+  requireAdmin,
 } from '../middleware/adminAuth';
-import { countDrafts, listOrders } from '../lib/db';
+import { countDrafts, getOrder, insertLog, listOrders, saveOrderPoster } from '../lib/db';
+import { normalizeDraftSchema, validatePosterLimits } from '../lib/validate';
 import { buildAdminStats } from '../services/stats';
+import { orderDetail, publicDraft } from '../services/orders';
 import type { Order } from '../types';
-import { requireAdmin } from '../middleware/adminAuth';
 
 const router = Router();
 
@@ -108,6 +110,47 @@ router.get('/api/admin/stats', requireAdmin, (_req: Request, res: Response, _nex
     totalLogs: stats.totalLogs,
     recentOrders: stats.recentOrders,
   });
+});
+
+// PUT /api/admin/orders/:id/poster — Editor Konten Poster back-office
+// (gate admin + rate limit adminWrite 60/mnt). Kontrak WHATSAPP-FLOW:
+// body `{ content: PosterDraft }`, kolom `engine` diisi 'manual', `revisi`
+// tidak disentuh, dan memicu audit-log `poster.edited`.
+router.put('/api/admin/orders/:id/poster', requireAdmin, (req: Request, res: Response, _next: NextFunction): void => {
+  // Konten poster hanya boleh ditulis editor back-office (AI sudah dibuang).
+  if (!enforceRateLimit(req, res, 'admin-poster', 'adminWrite', 'Terlalu banyak permintaan.')) return;
+
+  const { id } = req.params;
+  const order = getOrder(id);
+  if (!order) { sendError(res, 'Pesanan tidak ditemukan.', 404); return; }
+
+  const body = bodyObject(req.body);
+  if (!body) { sendError(res, 'Body request bukan JSON yang valid.', 400); return; }
+
+  // Kerangka scaffold boleh kosong (editor yang mengisi) — teks masih
+  // divalidasi tipe/bentuk + batas 240/140/60/40 di bawah.
+  const normalized = normalizeDraftSchema(body.content, { allowEmpty: true });
+  if (!normalized.draft) {
+    const detail = normalized.issues.map((issue) => `${issue.path}: ${issue.message}`).join('; ');
+    sendError(res, `Konten poster tidak valid. ${detail}`, 400);
+    return;
+  }
+
+  // Batas teks §4 tetap divalidasi (240/140/60/40) terhadap nilai ternormalisasi.
+  const limitIssues = validatePosterLimits(normalized.draft);
+  if (limitIssues.length > 0) {
+    const detail = limitIssues.map((issue) => `${issue.path}: ${issue.message}`).join('; ');
+    sendError(res, `Konten poster melebihi batas teks. ${detail}`, 400);
+    return;
+  }
+
+  // `engine` kolom diisi 'manual' (check constraint manual|gemini|local);
+  // kolom revisi/order lain tidak disentuh oleh endpoint ini.
+  const saved = saveOrderPoster(order.template_id, order.id, normalized.draft, 'manual');
+  insertLog(order.id, order.status, order.status, '[poster.edited] Konten poster disunting editor back-office.');
+
+  const detail = orderDetail(getOrder(id)!);
+  sendOk(res, { data: { draft: publicDraft(saved), engine: saved.engine }, ...detail });
 });
 
 export default router;

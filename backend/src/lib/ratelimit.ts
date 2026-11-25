@@ -13,15 +13,13 @@ interface Bucket {
 export const RATE_BUCKETS = {
   /** Login admin: 6 percobaan / 15 menit. */
   adminLogin: { limit: 6, windowMs: 15 * 60_000 },
-  /** Generate draft AI: 8 / 5 menit. */
-  drafts: { limit: 8, windowMs: 5 * 60_000 },
-  /** Checkout: 5 / 10 menit. */
+  /** Checkout publik & tulis pelanggan (brief/revisi): 5 / 10 menit. */
   checkout: { limit: 5, windowMs: 10 * 60_000 },
   /** Lacak order (publik): 20 / menit. */
   lookup: { limit: 20, windowMs: 60_000 },
   /** Tulis admin (PATCH status / PUT delivery): 60 / menit. */
   adminWrite: { limit: 60, windowMs: 60_000 },
-  /** Tulis pelanggan (brief tambahan & revisi): 10 / menit. */
+  /** Tulis pelanggan (POST /api/orders, brief tambahan & revisi): 10 / menit. */
   customerWrite: { limit: 10, windowMs: 60_000 },
 } as const;
 

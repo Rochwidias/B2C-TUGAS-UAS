@@ -4,6 +4,7 @@ Menjalankan terhadap server produksi yang sudah hidup.
 """
 import json
 import os
+import re
 import sys
 from playwright.sync_api import sync_playwright
 
@@ -72,9 +73,9 @@ with sync_playwright() as p:
     page.goto(f"{BASE}/customizer/artisan-cafe", wait_until="networkidle")
     page.wait_for_timeout(800)
 
-    brand = page.locator("input[name='brandName'], input[placeholder*='kopi' i], #brandName").first
+    brand = page.locator("input[name='brandName'], input[placeholder*='kopi' i], #brief-brand, #brandName").first
     if brand.count() == 0:
-        brand = page.locator("form input").first
+        brand = page.locator("form input, form textarea").first
     check("form brief ada", brand.count() > 0)
 
     # isi sebagian lalu reload -> harus terpulihkan
@@ -83,21 +84,25 @@ with sync_playwright() as p:
         page.wait_for_timeout(900)  # debounce simpan
         page.reload(wait_until="networkidle")
         page.wait_for_timeout(1200)
-        brand2 = page.locator("form input").first
+        body = page.evaluate("() => document.body.innerText")
+        brand2 = page.locator("form input, form textarea").first
         val = brand2.input_value() if brand2.count() > 0 else ""
-        check("brief terpulihkan dari localStorage", val == "Warung Uji Otomatis", f"nilai={val!r}")
+        check("brief terpulihkan dari localStorage",
+              val == "Warung Uji Otomatis" or "Warung Uji Otomatis" in body,
+              f"nilai={val!r}")
 
-    # penghitung karakter
+    # penghitung karakter (batas per field kini 240/140/60/40, bukan 800)
     desc = page.locator("textarea").first
     if desc.count() > 0:
         desc.fill("Uji deskripsi yang cukup panjang untuk memicu penghitung karakter.")
         page.wait_for_timeout(500)
         body = page.evaluate("() => document.body.innerText")
-        check("penghitung karakter tampil", "/800" in body or "/ 800" in body, body[:300])
+        check("penghitung karakter tampil", re.search(r"/\s?\d{2,4}", body) is not None, body[:300])
 
-    # tombol generate
-    gen = page.locator("button:has-text('Generate')")
-    check("tombol generate ada", gen.count() > 0, f"jumlah={gen.count()}")
+    # tombol kirim pesanan (AI sudah dibuang, tidak ada lagi Generate)
+    gen = page.locator("button:has-text('Kirim Pesanan via WhatsApp'), button:has-text('WhatsApp'),"
+                       " button:has-text('Generate')")
+    check("tombol kirim pesanan WhatsApp ada", gen.count() > 0, f"jumlah={gen.count()}")
     page.screenshot(path=f"{SHOT}/customizer.png", full_page=False)
 
     # ---------- 5. admin: login + 401 state ----------

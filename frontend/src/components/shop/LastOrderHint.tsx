@@ -5,11 +5,14 @@
 // Tidak menampilkan apa pun bila belum pernah checkout di perangkat ini.
 
 import { useSyncExternalStore } from 'react';
+import { WhatsAppChat } from '@/components/shop/WhatsAppChat';
 
 interface LastOrder {
   number: string;
   id: string;
   at: number;
+  /** Tahap pesanan terakhir — menentukan panduan chat WhatsApp. */
+  status?: string;
 }
 
 const KEY = 'craftai-last-order';
@@ -47,7 +50,11 @@ export function LastOrderHint({ onUse }: { onUse: (number: string) => void }) {
     try {
       const parsed: unknown = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && typeof (parsed as LastOrder).number === 'string') {
-        last = parsed as LastOrder;
+        const candidate = parsed as LastOrder;
+        last = {
+          ...candidate,
+          status: typeof candidate.status === 'string' ? candidate.status : '',
+        };
       }
     } catch {
       last = null;
@@ -57,7 +64,7 @@ export function LastOrderHint({ onUse }: { onUse: (number: string) => void }) {
   if (!last) {
     return (
       <p className="font-mono text-[11px] leading-relaxed text-ink-soft">
-        Setelah checkout, nomor order terakhir Anda akan muncul di sini sebagai pintasan.
+        Setelah pesanan dikirim, nomor order terakhir Anda akan muncul di sini sebagai pintasan.
       </p>
     );
   }
@@ -76,6 +83,7 @@ export function LastOrderHint({ onUse }: { onUse: (number: string) => void }) {
         <span aria-hidden="true">&rarr;</span>
         <span className="sr-only">Isi nomor ini ke kolom pencarian</span>
       </button>
+      <WhatsAppChat className="mt-4" status={last.status ?? ''} orderNumber={last.number} />
     </div>
   );
 }

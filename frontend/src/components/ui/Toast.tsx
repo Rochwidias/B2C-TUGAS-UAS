@@ -1,7 +1,7 @@
 'use client';
 
 // Toast: satu provider di layout, dipakai halaman mana pun lewat useToast().
-// Alasan: setiap aksi pengguna (simpan, generate, checkout) butuh umpan balik
+// Alasan: setiap aksi pengguna (simpan, kirim pesanan, revisi) butuh umpan balik
 // yang sama bentuknya; tanpa ini tiap halaman bikin alert sendiri.
 
 import {

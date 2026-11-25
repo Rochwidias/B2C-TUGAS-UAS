@@ -6,9 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
-import { generateLocalDraft, normalizeBrief } from './ai';
+import { normalizeBrief, scaffoldPoster } from './brief';
 import { findPackage, PACKAGES } from './packages';
-import type { AIDraft, Draft, DraftBrief, Order, OrderLog, OrderStatus, PackageOption, PaymentStatus, Template } from '../types';
+import type { AIDraft, Draft, DraftBrief, Order, OrderLog, OrderStatus, PackageOption, PaymentStatus, PosterEngine, Template } from '../types';
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS templates (
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS orders (
   live_website_url TEXT,
   download_zip_url TEXT,
   dev_note TEXT,
+  ai_draft_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS ai_drafts (
   template_id TEXT NOT NULL,
   input_prompt_data TEXT NOT NULL,
   ai_generated_content TEXT NOT NULL,
+  engine TEXT NOT NULL DEFAULT 'manual' CHECK (engine IN ('manual', 'gemini', 'local')),
   generated_at TEXT NOT NULL
 );
 
@@ -70,9 +72,9 @@ const TEMPLATE_COLUMNS = ['id', 'name', 'category', 'description', 'emoji', 'bas
 const ORDER_COLUMNS = [
   'id', 'order_number', 'template_id', 'status', 'payment_status', 'total_price',
   'contact_name', 'contact_whatsapp', 'contact_email', 'package_name', 'package_key', 'quota',
-  'live_website_url', 'download_zip_url', 'dev_note', 'created_at', 'updated_at',
+  'live_website_url', 'download_zip_url', 'dev_note', 'ai_draft_id', 'created_at', 'updated_at',
 ];
-const DRAFT_COLUMNS = ['id', 'order_id', 'template_id', 'input_prompt_data', 'ai_generated_content', 'generated_at'];
+const DRAFT_COLUMNS = ['id', 'order_id', 'template_id', 'input_prompt_data', 'ai_generated_content', 'engine', 'generated_at'];
 const LOG_COLUMNS = ['id', 'order_id', 'status_from', 'status_to', 'developer_note', 'timestamp'];
 
 type Row = Record<string, unknown>;
@@ -111,6 +113,7 @@ const mapOrder = (row: Row): Order => ({
   live_website_url: row.live_website_url === null ? null : String(row.live_website_url),
   download_zip_url: row.download_zip_url === null ? null : String(row.download_zip_url),
   dev_note: row.dev_note === null ? null : String(row.dev_note),
+  ai_draft_id: row.ai_draft_id === null || row.ai_draft_id === undefined ? null : String(row.ai_draft_id),
   created_at: String(row.created_at),
   updated_at: String(row.updated_at),
 });
@@ -130,6 +133,7 @@ const mapDraft = (row: Row): AIDraft => ({
   template_id: String(row.template_id),
   input_prompt_data: parseJson<DraftBrief>(row.input_prompt_data, normalizeBrief(null)),
   ai_generated_content: parseJson<Draft>(row.ai_generated_content, {} as Draft),
+  engine: (row.engine as PosterEngine) ?? 'manual',
   generated_at: String(row.generated_at),
 });
 
@@ -199,6 +203,46 @@ const SEED_BRIEF: DraftBrief = {
   toneOfVoice: 'santai',
 };
 
+// Konten poster demo UK-ORD-8812 — DITULIS TANGAN, bukan output generator
+// (AI sudah dibuang). Dipakai ulang oleh seed order supaya contoh back-office
+// selalu berupa poster terisi dan lolos batas teks §4.
+const DEMO_POSTER: Draft = {
+  brand: {
+    name: 'Kopi Senja Utama',
+    tagline: 'Rasa Otentik Kopi Nusantara di Jantung Kota',
+    about:
+      'Biji kopi single origin roast medium-dark dengan suasana nyaman untuk nugas dan santai. Buka tiap hari 08.00 - 23.00.',
+  },
+  theme: { primaryColor: '#8b5cf6', accentColor: '#6d28d9', fontPairing: 'Inter + Fraunces' },
+  poster: {
+    badge: 'Buka Tiap Hari 08.00 - 23.00',
+    headline: 'Rasa Otentik Kopi Nusantara di Jantung Kota',
+    subheadline:
+      'Seduh single origin favoritmu dalam suasana hangat — pas untuk nugas, ngobrol, dan santai sore.',
+    ctaText: 'Pesan Meja Sekarang',
+  },
+  points: [
+    {
+      icon: 'utensils',
+      title: 'Menu Andalan Setiap Hari',
+      description:
+        'Es kopi susu gula aren, manual brew V60, dan camilan rumahan diracik segar setiap pagi.',
+    },
+    {
+      icon: 'tag',
+      title: 'Diskon Pelanggan Baru',
+      description:
+        'Potongan harga khusus untuk yang pertama kali memesan lewat WhatsApp di Kopi Senja Utama.',
+    },
+    {
+      icon: 'message-circle',
+      title: 'Pesan Lewat WhatsApp',
+      description:
+        'Booking meja atau pesan antar langsung dari tombol WhatsApp — tanpa aplikasi tambahan.',
+    },
+  ],
+};
+
 type Db = InstanceType<typeof DatabaseSync>;
 
 let handle: Db | null = null;
@@ -224,7 +268,7 @@ function openDb(): Db {
 // ---------------------------------------------------------------------------
 
 /** Tambah kolom baru tanpa menyentuh data lama; aman dijalankan berulang kali. */
-function ensureColumn(db: Db, table: 'orders', column: string, ddl: string): void {
+function ensureColumn(db: Db, table: 'orders' | 'ai_drafts', column: string, ddl: string): void {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Row[];
   if (columns.some((col) => col.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
@@ -234,6 +278,14 @@ function migrate(db: Db): void {
   // §3: package_key ('satuan'|'hemat') & quota (1|3) dibuat via ALTER TABLE.
   ensureColumn(db, 'orders', 'package_key', 'package_key TEXT');
   ensureColumn(db, 'orders', 'quota', 'quota INTEGER NOT NULL DEFAULT 1');
+  // Kolom kontrak baru (docs/WHATSAPP-FLOW.md): tautan draft AI & provenance konten.
+  ensureColumn(db, 'orders', 'ai_draft_id', 'ai_draft_id TEXT');
+  ensureColumn(
+    db,
+    'ai_drafts',
+    'engine',
+    "engine TEXT NOT NULL DEFAULT 'manual' CHECK (engine IN ('manual', 'gemini', 'local'))",
+  );
 
   if (countOf(db, 'templates') === 0) insertSeedTemplates(db);
   else upsertSeedTemplates(db);
@@ -311,26 +363,18 @@ function migrateLegacyOrders(db: Db): void {
 }
 
 /**
- * Draft lama memakai skema website (`heroSection`/`features`/`faq`). Skema §4
- * menggantikannya, jadi isi draft di-regenerate dari brief tersimpan agar
- * halaman customer/admin tidak pernah menerima bentuk data yang sudah dihapus.
+ * Draft lama memakai skema website (`heroSection`/`features`/`faq`) yang sudah
+ * dihapus dari kontrak. Generator lokal sudah dibuang (docs/WHATSAPP-FLOW.md),
+ * jadi draft berbentuk lama dibuang dari DB — posternya disusun ulang oleh
+ * editor manusia lewat PUT /api/admin/orders/:id/poster.
  */
 function migrateLegacyDrafts(db: Db): void {
-  const rows = db.prepare('SELECT id, input_prompt_data FROM ai_drafts').all() as Row[];
-  const update = db.prepare('UPDATE ai_drafts SET ai_generated_content = ? WHERE id = ?');
+  const rows = db.prepare('SELECT id, ai_generated_content FROM ai_drafts').all() as Row[];
+  const remove = db.prepare('DELETE FROM ai_drafts WHERE id = ?');
   for (const row of rows) {
-    let content: unknown;
-    try {
-      content = JSON.parse(String(row.input_prompt_data));
-    } catch {
-      content = null;
-    }
-    const brief = normalizeBrief(content);
-    const raw = db.prepare('SELECT ai_generated_content FROM ai_drafts WHERE id = ?').get(String(row.id)) as Row | undefined;
-    const current = parseJson<Record<string, unknown>>(raw?.ai_generated_content, {});
-    if (current && typeof current.poster === 'object' && Array.isArray(current.points)) continue;
-    const regenerated = generateLocalDraft(brief);
-    update.run(JSON.stringify(regenerated), String(row.id));
+    const current = parseJson<Record<string, unknown>>(row.ai_generated_content, {});
+    const isPosterShaped = Boolean(current) && typeof current.poster === 'object' && Array.isArray(current.points);
+    if (!isPosterShaped) remove.run(String(row.id));
   }
 }
 
@@ -359,8 +403,8 @@ function ensureDemoOrder(db: Db): void {
     // Draft lama demo dibuang: skema website sudah tidak ada di kontrak baru.
     db.prepare('DELETE FROM ai_drafts WHERE order_id = ?').run(String(existing.id));
     db.prepare(
-      'INSERT INTO ai_drafts (id, order_id, template_id, input_prompt_data, ai_generated_content, generated_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ).run(randomUUID(), String(existing.id), SEED_BRIEF.templateId, JSON.stringify(SEED_BRIEF), JSON.stringify(generateLocalDraft(SEED_BRIEF)), timestamp);
+      'INSERT INTO ai_drafts (id, order_id, template_id, input_prompt_data, ai_generated_content, engine, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(randomUUID(), String(existing.id), SEED_BRIEF.templateId, JSON.stringify(SEED_BRIEF), JSON.stringify(DEMO_POSTER), 'manual', timestamp);
     db.prepare('INSERT INTO order_logs (id, order_id, status_from, status_to, developer_note, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
       .run(randomUUID(), String(existing.id), 'in_progress', 'in_progress', '[BRIEF TAMBAHAN] Draft demo dimuat ulang dengan skema poster terbaru.', timestamp);
   }
@@ -376,9 +420,8 @@ function ensureDemoOrder(db: Db): void {
 }
 
 function seedDemoOrder(db: Db, pkg: PackageOption, timestamp: string): void {
-  // Draft demo dirender oleh generator lokal supaya contoh tidak membusuk
-  // kalau isi generator berubah.
-  const draftContent = generateLocalDraft(SEED_BRIEF);
+  // Konten demo ditulis tangan (DEMO_POSTER) — tidak ada generator lagi.
+  const draftContent = DEMO_POSTER;
   const draftId = randomUUID();
   const orderId = randomUUID();
 
@@ -394,12 +437,13 @@ function seedDemoOrder(db: Db, pkg: PackageOption, timestamp: string): void {
       'Rangga Pratama', '081234567890', 'rangga@example.com', pkg.name, pkg.key, pkg.quota,
       null, null,
       'Struktur konten poster sudah final, tinggal poles warna dan optimasi gambar.',
+      null,
       timestamp, timestamp,
     );
 
     db.prepare(
-      'INSERT INTO ai_drafts (id, order_id, template_id, input_prompt_data, ai_generated_content, generated_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ).run(draftId, orderId, SEED_BRIEF.templateId, JSON.stringify(SEED_BRIEF), JSON.stringify(draftContent), timestamp);
+      'INSERT INTO ai_drafts (id, order_id, template_id, input_prompt_data, ai_generated_content, engine, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(draftId, orderId, SEED_BRIEF.templateId, JSON.stringify(SEED_BRIEF), JSON.stringify(draftContent), 'manual', timestamp);
 
     db.prepare(
       'INSERT INTO order_logs (id, order_id, status_from, status_to, developer_note, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
@@ -432,18 +476,59 @@ export function getTemplate(id: string): Template | null {
   return pick<Template>(row, TEMPLATE_COLUMNS, mapTemplate);
 }
 
-export function insertDraft(templateId: string, brief: DraftBrief, content: Draft): AIDraft {
+export function insertDraft(templateId: string, brief: DraftBrief, content: Draft, engine: PosterEngine = 'manual'): AIDraft {
   const draft: AIDraft = {
     id: randomUUID(),
     order_id: null,
     template_id: templateId,
     input_prompt_data: brief,
     ai_generated_content: content,
+    engine,
     generated_at: nowIso(),
   };
   getDb()
-    .prepare('INSERT INTO ai_drafts (id, order_id, template_id, input_prompt_data, ai_generated_content, generated_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(draft.id, null, templateId, JSON.stringify(brief), JSON.stringify(content), draft.generated_at);
+    .prepare('INSERT INTO ai_drafts (id, order_id, template_id, input_prompt_data, ai_generated_content, engine, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(draft.id, null, templateId, JSON.stringify(brief), JSON.stringify(content), engine, draft.generated_at);
+  return draft;
+}
+
+/**
+ * Simpan konten poster untuk sebuah order (PUT /api/admin/orders/:id/poster).
+ * Draft terakhir milik order diperbarui; bila belum ada, draft baru dibuat
+ * langsung menempel pada order. `engine` selalu 'manual' — konten ditulis
+ * editor back-office, bukan AI (docs/WHATSAPP-FLOW.md).
+ */
+export function saveOrderPoster(
+  templateId: string,
+  orderId: string,
+  content: Draft,
+  engine: PosterEngine = 'manual',
+): AIDraft {
+  const db = getDb();
+  const existing = listDraftsByOrderId(orderId);
+  const timestamp = nowIso();
+
+  if (existing.length > 0) {
+    // Selalu sentuh draft TERAKHIR supaya urutan `generated_at` tetap mencerminkan
+    // konten terbaru yang dibaca orderDetail().
+    const target = existing[existing.length - 1];
+    db.prepare('UPDATE ai_drafts SET ai_generated_content = ?, engine = ?, generated_at = ? WHERE id = ?')
+      .run(JSON.stringify(content), engine, timestamp, target.id);
+    return { ...target, ai_generated_content: content, engine, generated_at: timestamp };
+  }
+
+  const draft: AIDraft = {
+    id: randomUUID(),
+    order_id: orderId,
+    template_id: templateId,
+    input_prompt_data: normalizeBrief(null),
+    ai_generated_content: content,
+    engine,
+    generated_at: timestamp,
+  };
+  db.prepare(
+    'INSERT INTO ai_drafts (id, order_id, template_id, input_prompt_data, ai_generated_content, engine, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(draft.id, orderId, templateId, JSON.stringify(draft.input_prompt_data), JSON.stringify(content), engine, timestamp);
   return draft;
 }
 
@@ -518,7 +603,6 @@ function nextOrderNumberSafe(db: Db): string {
 }
 
 export interface CreateOrderInput {
-  draftId: string;
   templateId: string;
   packageKey: string;
   contactName: string;
@@ -526,7 +610,12 @@ export interface CreateOrderInput {
   contactEmail: string;
 }
 
-export function createOrder(input: CreateOrderInput): { order: Order; draft: AIDraft | null; logs: OrderLog[] } {
+/**
+ * Buat order dari pesanan web (POST /api/orders) tanpa draft AI sama sekali:
+ * status awal `draft`, `ai_draft_id` NULL, dan pelanggan mengonfirmasi lewat
+ * WhatsApp (docs/WHATSAPP-FLOW.md).
+ */
+export function createOrder(input: CreateOrderInput): { order: Order; logs: OrderLog[] } {
   const db = getDb();
   // Paket adalah satu-satunya sumber harga & kuota (§2); service sudah
   // memvalidasi key, di sini tetap ada guard agar harga tidak pernah 0 diam-diam.
@@ -537,8 +626,8 @@ export function createOrder(input: CreateOrderInput): { order: Order; draft: AID
     id: randomUUID(),
     order_number: orderNumber,
     template_id: input.templateId,
-    status: 'paid',
-    payment_status: 'paid',
+    status: 'draft',
+    payment_status: 'unpaid',
     total_price: pkg.price,
     contact_name: input.contactName,
     contact_whatsapp: input.contactWhatsapp,
@@ -549,19 +638,19 @@ export function createOrder(input: CreateOrderInput): { order: Order; draft: AID
     live_website_url: null,
     download_zip_url: null,
     dev_note: null,
+    ai_draft_id: null,
     created_at: timestamp,
     updated_at: timestamp,
   };
 
-  db.prepare(`INSERT INTO orders (${ORDER_COLUMNS.join(', ')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+  db.prepare(`INSERT INTO orders (${ORDER_COLUMNS.join(', ')}) VALUES (${ORDER_COLUMNS.map(() => '?').join(', ')})`).run(
     order.id, order.order_number, order.template_id, order.status, order.payment_status, order.total_price,
     order.contact_name, order.contact_whatsapp, order.contact_email, order.package_name, order.package_key, order.quota,
-    order.live_website_url, order.download_zip_url, order.dev_note, order.created_at, order.updated_at,
+    order.live_website_url, order.download_zip_url, order.dev_note, order.ai_draft_id, order.created_at, order.updated_at,
   );
-  attachDraftToOrder(input.draftId, order.id);
-  insertLog(order.id, 'draft', 'paid', 'Pembayaran mock (simulasi) diterima otomatis oleh sistem.');
+  insertLog(order.id, 'draft', 'draft', 'Pesanan dicatat di web; konfirmasi pelanggan menyusul lewat WhatsApp.');
 
-  return { order, draft: getDraft(input.draftId), logs: listLogs(order.id) };
+  return { order, logs: listLogs(order.id) };
 }
 
 export function insertLog(orderId: string, statusFrom: string | null, statusTo: string, developerNote: string | null): OrderLog {
