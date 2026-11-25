@@ -1,8 +1,8 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { getOrder, updateDelivery } from '../lib/db';
 import { asString, bodyObject, sendError, sendOk } from '../lib/http';
-import { clientKey, rateLimit } from '../lib/ratelimit';
-import { LIMITS, requireCap } from '../lib/security';
+import { enforceRateLimit } from '../lib/ratelimit';
+import { LIMITS, requireCap, sanitizeSingleLine } from '../lib/security';
 import { requireAdmin } from '../middleware/adminAuth';
 
 const router = Router();
@@ -19,11 +19,7 @@ const isValidUrl = (value: string): boolean => {
 // PUT /api/orders/:id/delivery — simpan hasil delivery (gate admin + rate limit 60/mnt).
 router.put('/api/orders/:id/delivery', requireAdmin, (req: Request, res: Response, _next: NextFunction): void => {
   // Delivery menentukan apa yang diterima customer; hanya admin boleh menulis.
-  const limit = rateLimit(clientKey(req, 'admin-delivery'), 60, 60_000);
-  if (!limit.ok) {
-    sendError(res, `Terlalu banyak permintaan. Coba lagi dalam ${limit.retryAfterSeconds} detik.`, 429);
-    return;
-  }
+  if (!enforceRateLimit(req, res, 'admin-delivery', 'adminWrite', 'Terlalu banyak permintaan.')) return;
 
   const { id } = req.params;
   const order = getOrder(id);
@@ -32,8 +28,9 @@ router.put('/api/orders/:id/delivery', requireAdmin, (req: Request, res: Respons
   const body = bodyObject(req.body);
   if (!body) { sendError(res, 'Body request bukan JSON yang valid.', 400); return; }
 
-  const liveWebsiteUrl = asString(body.liveWebsiteUrl);
-  const downloadZipUrl = asString(body.downloadZipUrl);
+  // Sanitasi dulu (audit §12: kontrol + U+007F + C1 ikut dibuang), baru divalidasi.
+  const liveWebsiteUrl = sanitizeSingleLine(asString(body.liveWebsiteUrl));
+  const downloadZipUrl = sanitizeSingleLine(asString(body.downloadZipUrl));
 
   if (!liveWebsiteUrl) { sendError(res, 'liveWebsiteUrl wajib diisi.', 400); return; }
   if (liveWebsiteUrl.length > LIMITS.url) {

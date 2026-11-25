@@ -1,15 +1,17 @@
 @import "tailwindcss";
 
-/* Arah desain: design-system/craftai-studio/DESIGN.md (print workshop: kertas,
-   tinta, garis registrasi). Semua komponen memakai token semantik di bawah,
-   sehingga tema terang/gelap beralih tanpa satu pun `dark:` di komponen. */
+/* Palet Aether Creative (docs/REDESIGN.md §8): navy + violet di atas latar
+   terang, kartu putih bersih, aksen violet. Semua komponen memakai token
+   semantik di bawah, sehingga tema terang/gelap beralih tanpa satu pun
+   `dark:` di komponen. Tipografi tetap Archivo / Instrument Serif /
+   JetBrains Mono (design-system/craftai-studio/DESIGN.md). */
 :root {
-  --paper: #f5f0e6;
-  --surface: #fffcf6;
-  --ink: #16130f;
-  --ink-soft: #5c544b;
-  --rule: #d8d0c2;
-  --accent: #c63c1c;
+  --paper: #f6f5fb;
+  --surface: #ffffff;
+  --ink: #16162e;
+  --ink-soft: #5b5b7d;
+  --rule: #e3e1f0;
+  --accent: #7c3aed;
   --accent-ink: #ffffff;
   --ok: #1f6f4a;
   --warn: #8a5a00;
@@ -19,13 +21,13 @@
 }
 
 [data-theme='dark'] {
-  --paper: #141210;
-  --surface: #1e1a16;
-  --ink: #f5f0e6;
-  --ink-soft: #a79c8e;
-  --rule: #352f28;
-  --accent: #ff6b3d;
-  --accent-ink: #141210;
+  --paper: #121220;
+  --surface: #1b1b2e;
+  --ink: #f2f1fb;
+  --ink-soft: #a6a4c6;
+  --rule: #2f2f4a;
+  --accent: #a78bfa;
+  --accent-ink: #14142b;
   --ok: #5fd3a0;
   --warn: #e8b54b;
   --danger: #ff8a7a;

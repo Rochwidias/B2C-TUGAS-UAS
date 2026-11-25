@@ -13,21 +13,33 @@ export const LIMITS = {
   whatsapp: 25,
   email: 160,
   devNote: 2000,
+  revision: 1000,
+  briefNote: 400,
   url: 500,
   password: 200,
 } as const;
 
 export type LimitKey = keyof typeof LIMITS;
 
-/** Buang karakter kontrol (kecuali tab/newline) agar teks tidak merusak prompt/log. */
+/**
+ * Buang karakter kontrol agar teks tidak merusak prompt/log/HTTP:
+ * C0 (kecuali tab & newline), DEL `U+007F`, dan C1 `U+0080–U+009F`.
+ */
 export function sanitizeText(value: string): string {
   let out = '';
   for (const char of value) {
     const code = char.codePointAt(0) ?? 0;
-    const isControl = code < 0x20 && char !== '\n' && char !== '\t';
-    if (!isControl) out += char;
+    const isC0 = code < 0x20 && char !== '\n' && char !== '\t';
+    const isDelete = code === 0x7f;
+    const isC1 = code >= 0x80 && code <= 0x9f;
+    if (!isC0 && !isDelete && !isC1) out += char;
   }
   return out;
+}
+
+/** Sanitasi untuk medan satu baris (URL, nomor): tab & newline ikut dibuang. */
+export function sanitizeSingleLine(value: string): string {
+  return sanitizeText(value).replace(/[\n\t]/g, '').trim();
 }
 
 /**

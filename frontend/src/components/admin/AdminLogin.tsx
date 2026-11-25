@@ -131,7 +131,8 @@ function LoginForm() {
           id="password-hint"
           className="mt-2 border border-dashed border-rule px-2 py-1.5 text-[11px] text-ink-soft"
         >
-          Password demo environment ini: <code className="font-mono font-semibold text-ink">admin123</code>
+          Password diatur oleh admin melalui konfigurasi server, bukan dibagikan di halaman ini.
+          Akun demo dicatat di README.
         </p>
 
         <button
@@ -180,7 +181,7 @@ export default function AdminLogin() {
     <div className="flex min-h-screen flex-col bg-paper text-ink">
       <div className="flex items-center justify-between gap-3 border-b border-ink px-4 py-2.5 sm:px-6">
         <p className="font-mono text-[10px] tracking-wider text-ink-soft uppercase">
-          CraftAI Studio / back office
+          Aether Creative / back office
         </p>
         <ThemeToggle />
       </div>
@@ -206,8 +207,8 @@ export default function AdminLogin() {
             <span className="font-serif italic">produksi</span>
           </h1>
           <p className="mt-4 max-w-[38ch] text-[12.5px] leading-relaxed text-paper/85">
-            Papan pesanan, berkas brief customer, dan penyerahan hasil cetak. Hanya untuk tim
-            developer dan admin CraftAI Studio.
+            Papan pesanan, berkas brief poster, dan penyerahan hasil cetak. Hanya untuk tim editor
+            dan admin Aether Creative.
           </p>
 
           <dl className="mt-6 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-paper/25 pt-4 font-mono text-[10.5px]">
@@ -225,7 +226,7 @@ export default function AdminLogin() {
             </div>
             <div>
               <dt className="tracking-wide text-paper/60 uppercase">Format</dt>
-              <dd className="mt-0.5 text-paper">JSON + ZIP</dd>
+              <dd className="mt-0.5 text-paper">Poster + ZIP</dd>
             </div>
           </dl>
         </section>

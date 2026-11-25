@@ -18,14 +18,14 @@ export default function GlobalError({
           minHeight: '100vh',
           display: 'grid',
           placeItems: 'center',
-          background: '#F5F0E6',
-          color: '#16130F',
+          background: '#F6F5FB',
+          color: '#16162E',
           fontFamily:
             '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
           padding: '1.5rem',
         }}
       >
-        <main style={{ maxWidth: '34rem', border: '1px solid #D8D0C2', background: '#FFFCF6', padding: '1.75rem' }}>
+        <main style={{ maxWidth: '34rem', border: '1px solid #D8D0C2', background: '#FFFFFF', padding: '1.75rem' }}>
           <p
             style={{
               margin: 0,
@@ -33,15 +33,15 @@ export default function GlobalError({
               fontSize: '10px',
               letterSpacing: '0.16em',
               textTransform: 'uppercase',
-              color: '#5C544B',
+              color: '#5B5B7D',
             }}
           >
-            Galat aplikasi
+            Galat aplikasi / Aether Creative
           </p>
           <h1 style={{ margin: '0.75rem 0 0', fontSize: '1.6rem', lineHeight: 1.15 }}>
-            Aplikasi sedang tidak bisa dimuat
+            Aether Creative sedang tidak bisa dimuat
           </h1>
-          <p style={{ margin: '0.85rem 0 0', fontSize: '0.95rem', lineHeight: 1.6, color: '#5C544B' }}>
+          <p style={{ margin: '0.85rem 0 0', fontSize: '0.95rem', lineHeight: 1.6, color: '#5B5B7D' }}>
             Tidak ada data yang hilang. Muat ulang halaman ini untuk mencoba lagi.
           </p>
           {error.digest ? (
@@ -52,7 +52,7 @@ export default function GlobalError({
                 padding: '0.5rem 0.75rem',
                 fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
                 fontSize: '10px',
-                color: '#5C544B',
+                color: '#5B5B7D',
               }}
             >
               Kode acuan: {error.digest}
@@ -64,8 +64,8 @@ export default function GlobalError({
             style={{
               marginTop: '1.5rem',
               minHeight: '44px',
-              border: '1px solid #16130F',
-              background: '#C63C1C',
+              border: '1px solid #16162E',
+              background: '#7C3AED',
               color: '#FFFFFF',
               padding: '0 1.1rem',
               fontSize: '0.85rem',

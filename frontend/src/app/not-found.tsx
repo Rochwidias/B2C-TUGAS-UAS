@@ -14,8 +14,9 @@ export default function NotFound() {
         </h1>
 
         <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
-          Tautan mungkin salah tulis, atau halaman sudah dipindahkan. Nomor order tetap bisa
-          dilacak dari halaman lacak pesanan.
+          Tautan mungkin salah tulis, atau halaman sudah dipindahkan. Katalog poster Aether
+          Creative tetap bisa dibuka dari halaman depan, dan nomor order tetap bisa dilacak
+          tanpa login.
         </p>
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row">

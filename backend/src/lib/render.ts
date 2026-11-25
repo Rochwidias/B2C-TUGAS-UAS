@@ -1,9 +1,11 @@
-// Renderer draft -> satu file HTML mandiri untuk GET /api/export/[draftId].
+// Renderer draft -> HTML poster SIAP PAKAI untuk GET /api/export/[draftId]
+// (docs/REDESIGN.md §4): rasio poster ± 4:5, headline besar, badge, 3 poin,
+// CTA, dan warna theme — bukan halaman website lagi.
 // Tanpa CDN: CSS di-inline, font memakai stack sistem, gambar tidak dibutuhkan.
 
-import type { Draft, Template } from '../types';
+import type { Draft, DraftPoint, Template } from '../types';
 
-const escapeHtml = (value: string): string =>
+export const escapeHtml = (value: string): string =>
   value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -39,11 +41,13 @@ const ICON_PATHS: Record<string, string> = {
   'message-circle': 'M7.9 20A9 9 0 1 0 4 16.1L2 22Z',
   'shopping-bag': 'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z|M3 6h18|M16 10a4 4 0 0 1-8 0',
   truck: 'M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2|M15 18H9|M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14|M9 18h6|circle 17,18,r2|circle 7,18,r2',
-  lock: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z|M7 11V7a5 5 0 0 1 10 0v4',
-  folders: 'M8 17a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2.4a2 2 0 0 1 1.6.8l.6.8a2 2 0 0 0 1.6.8H20a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2Z|M4 19a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h12.4a2 2 0 0 1 1.6.8l.6.8a2 2 0 0 0 1.6.8H20a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2Z',
-  handshake: 'm11 17 2 2a1 1 0 1 0 3-3|m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4|m21 3 1 11h-2|M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3|M3 4h8',
-  'trending-up': 'M16 7h6v6|M22 7l-8.5 8.5-5-5L2 17',
   star: 'm12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z',
+  tag: 'M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z|circle 7.5,7.5,r0.5',
+  clock: 'M12 6v6l4 2|circle 12,12,r10',
+  sparkles: 'M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z',
+  layers: 'M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z|M22 17.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65|M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65',
+  handshake: 'm11 17 2 2a1 1 0 1 0 3-3|m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4|m21 3 1 11h-2|M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3|M3 4h8',
+  megaphone: 'm3 11 18-5v12L3 14v-3z|M11.6 16.8a3 3 0 1 1-5.8-1.6',
   zap: 'M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14Z',
 };
 
@@ -53,233 +57,247 @@ function iconSvg(name: string): string {
   if (!paths) return escapeHtml(name);
   const inner = paths
     .split('|')
-    .map((p) =>
-      p.startsWith('circle ')
+    .map((path) =>
+      path.startsWith('circle ')
         ? (() => {
-            const [, cx, cy, r] = p.split(/[, ]+/);
+            const [, cx, cy, r] = path.split(/[, ]+/);
             return `<circle cx="${cx}" cy="${cy}" r="${r}"/>`;
           })()
-        : `<path d="${p}"/>`,
+        : `<path d="${path}"/>`,
     )
     .join('');
   return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+}
+
+function pointHtml(point: DraftPoint, index: number): string {
+  return `      <article class="point">
+        <span class="point-icon" aria-hidden="true">${iconSvg(point.icon)}</span>
+        <div class="point-text">
+          <h3>${escapeHtml(point.title)}</h3>
+          <p>${escapeHtml(point.description)}</p>
+        </div>
+        <span class="point-index" aria-hidden="true">0${index + 1}</span>
+      </article>`;
 }
 
 export function renderDraftToHtml(draft: Draft, templateMeta?: Partial<Template> | null): string {
   const primary = draft.theme.primaryColor;
   const accent = draft.theme.accentColor;
   const onPrimary = readableOn(primary);
+  const onAccent = readableOn(accent);
   const fontStack = `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`;
-  const templateName = templateMeta?.name ?? 'Template CraftAI Studio';
-  const brandIcon = iconSvg('star');
-
-  const featuresHtml = draft.features
-    .map(
-      (feature) => `      <article class="card">
-        <span class="card-icon" aria-hidden="true">${iconSvg(feature.icon)}</span>
-        <h3>${escapeHtml(feature.title)}</h3>
-        <p>${escapeHtml(feature.description)}</p>
-      </article>`,
-    )
-    .join('\n');
-
-  const faqHtml = draft.faq
-    .map(
-      (item) => `      <details class="faq-item">
-        <summary>${escapeHtml(item.q)}</summary>
-        <p>${escapeHtml(item.a)}</p>
-      </details>`,
-    )
-    .join('\n');
+  const templateName = templateMeta?.name ?? 'Poster Aether Creative';
+  const pointsHtml = draft.points.map(pointHtml).join('\n');
 
   return `<!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(draft.brand.name)} — ${escapeHtml(draft.brand.tagline)}</title>
-<meta name="description" content="${escapeHtml(draft.brand.about)}">
+<title>${escapeHtml(draft.poster.headline)} — ${escapeHtml(draft.brand.name)}</title>
+<meta name="description" content="${escapeHtml(draft.poster.subheadline)}">
 <style>
   :root {
     --primary: ${primary};
     --accent: ${accent};
-    --primary-soft: ${withAlpha(primary, 0.14)};
     --on-primary: ${onPrimary};
-    --bg: #0b1120;
-    --surface: #111a2e;
-    --surface-2: #16213a;
-    --border: #24304d;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
+    --on-accent: ${onAccent};
+    --primary-soft: ${withAlpha(primary, 0.16)};
+    --paper: #f6f5fb;
+    --surface: #ffffff;
+    --ink: #16162e;
+    --ink-soft: #5b5b7d;
+    --rule: #e3e1f0;
     --font: ${fontStack};
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: var(--bg);
-    color: var(--text);
+    background: var(--paper);
+    color: var(--ink);
     font-family: var(--font);
-    line-height: 1.6;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    display: flex;
+    justify-content: center;
+    padding: clamp(12px, 3vw, 28px) clamp(8px, 2vw, 16px);
   }
-  a { color: inherit; }
-  .container { width: min(1080px, 100% - 2.5rem); margin-inline: auto; }
-  header.site {
-    position: sticky; top: 0; z-index: 10;
-    background: rgba(11, 17, 32, 0.85);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--border);
+  /* Rasio poster ± 4:5 — sama dengan preview live di aplikasi. */
+  .poster {
+    width: min(640px, 100%);
+    aspect-ratio: 4 / 5;
+    background:
+      radial-gradient(circle at 10% -10%, ${withAlpha(primary, 0.38)}, transparent 55%),
+      radial-gradient(circle at 96% 104%, ${withAlpha(accent, 0.34)}, transparent 55%),
+      var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: clamp(16px, 3vw, 26px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(18px, 4vw, 40px);
+    box-shadow: 0 24px 60px -32px rgba(22, 22, 46, 0.5);
   }
-  .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 1rem; }
-  .brand-mark { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; letter-spacing: -0.01em; }
-  .brand-mark span.dot {
-    width: 34px; height: 34px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    display: grid; place-items: center;
-    color: var(--on-primary);
-  }
-  .nav-links { display: flex; gap: 1.4rem; font-size: 0.9rem; color: var(--muted); }
-  .nav-links a { text-decoration: none; }
-  .nav-links a:hover, .nav-links a:focus-visible { color: var(--text); }
-  .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-    padding: 0.7rem 1.3rem; border-radius: 12px; border: 1px solid transparent;
-    font-size: 0.95rem; font-weight: 600; text-decoration: none; cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-  }
-  .btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
-  .btn-primary { background: var(--primary); color: var(--on-primary); box-shadow: 0 10px 30px -12px ${withAlpha(primary, 0.8)}; }
-  .btn-primary:hover { transform: translateY(-2px); background: var(--accent); color: #fff; }
-  .btn-ghost { background: var(--surface); color: var(--text); border-color: var(--border); }
-  .btn-ghost:hover { background: var(--surface-2); }
-  .hero { padding: 5rem 0 4rem; position: relative; overflow: hidden; }
-  .hero::before {
-    content: ""; position: absolute; inset: -40% -20% auto;
-    height: 420px; background: radial-gradient(circle at 30% 40%, var(--primary-soft), transparent 60%);
-    pointer-events: none;
+  .poster-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
   }
   .badge {
-    display: inline-block; padding: 0.35rem 0.9rem; border-radius: 999px;
-    background: var(--primary-soft); border: 1px solid ${withAlpha(primary, 0.4)};
-    color: var(--primary); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em;
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: var(--on-primary);
+    font-size: clamp(0.66rem, 1.6vw, 0.85rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
-  .hero h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.15; margin: 1.2rem 0 1rem; letter-spacing: -0.02em; }
-  .hero p.lead { font-size: 1.1rem; color: var(--muted); max-width: 62ch; margin: 0 0 2rem; }
-  .hero-actions { display: flex; flex-wrap: wrap; gap: 0.9rem; }
-  section.block { padding: 3.5rem 0; border-top: 1px solid var(--border); }
-  section.block h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin: 0 0 0.6rem; letter-spacing: -0.01em; }
-  section.block > .container > p.section-lead { color: var(--muted); margin: 0 0 2rem; max-width: 64ch; }
-  .grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-    padding: 1.6rem; transition: border-color 0.15s ease, transform 0.15s ease;
+  .brand {
+    font-size: clamp(0.7rem, 1.7vw, 0.9rem);
+    font-weight: 700;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+    text-align: right;
   }
-  .card:hover { border-color: var(--primary); transform: translateY(-3px); }
-  .card-icon {
-    display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px;
-    background: var(--primary-soft); color: var(--primary); margin-bottom: 0.9rem;
+  .headline {
+    font-size: clamp(1.7rem, 5.6vw, 3rem);
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    margin: clamp(12px, 3vw, 26px) 0 8px;
+    font-weight: 800;
+    color: var(--ink);
+    text-wrap: balance;
   }
-  .icon { width: 24px; height: 24px; }
-  .card h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
-  .card p { margin: 0; color: var(--muted); font-size: 0.94rem; }
-  .faq-item {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    padding: 0.4rem 1.2rem; margin-bottom: 0.8rem;
+  .subheadline {
+    margin: 0;
+    font-size: clamp(0.8rem, 2vw, 1.02rem);
+    color: var(--ink-soft);
+    max-width: 46ch;
   }
-  .faq-item summary { cursor: pointer; font-weight: 600; padding: 0.8rem 0; list-style: none; position: relative; padding-right: 1.6rem; }
-  .faq-item summary::-webkit-details-marker { display: none; }
-  .faq-item summary::after { content: "+"; position: absolute; right: 0; color: var(--primary); font-size: 1.2rem; }
-  .faq-item[open] summary::after { content: "–"; }
-  .faq-item summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 8px; }
-  .faq-item p { margin: 0 0 1rem; color: var(--muted); font-size: 0.95rem; }
-  .cta-band {
+  .points {
+    display: grid;
+    gap: clamp(7px, 1.6vw, 14px);
+    margin: clamp(14px, 3vw, 26px) 0 0;
+    flex: 1;
+    align-content: start;
+  }
+  .point {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: clamp(8px, 2vw, 16px);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    border-radius: clamp(10px, 2vw, 14px);
+    padding: clamp(8px, 1.8vw, 16px);
+  }
+  .point-icon {
+    display: grid;
+    place-items: center;
+    width: clamp(28px, 5vw, 40px);
+    height: clamp(28px, 5vw, 40px);
+    border-radius: 10px;
+    background: var(--primary-soft);
+    color: var(--accent);
+    flex: none;
+  }
+  .icon { width: 20px; height: 20px; }
+  .point-text h3 {
+    margin: 0 0 2px;
+    font-size: clamp(0.78rem, 1.9vw, 0.98rem);
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .point-text p {
+    margin: 0;
+    font-size: clamp(0.68rem, 1.6vw, 0.85rem);
+    color: var(--ink-soft);
+  }
+  .point-index {
+    position: absolute;
+    right: 10px;
+    top: 8px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--rule);
+  }
+  .cta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: clamp(12px, 3vw, 24px);
+    padding: clamp(10px, 2.2vw, 20px);
+    border-radius: clamp(10px, 2vw, 16px);
     background: linear-gradient(135deg, var(--primary), var(--accent));
-    color: var(--on-primary); border-radius: 20px; padding: 2.6rem; text-align: center;
+    color: var(--on-primary);
   }
-  .cta-band h2 { margin: 0 0 0.6rem; }
-  .cta-band p { margin: 0 auto 1.6rem; opacity: 0.9; max-width: 56ch; }
-  .cta-band .btn { background: rgba(255, 255, 255, 0.94); color: #0f172a; }
-  .cta-band .btn:hover { background: #fff; }
-  footer.site { border-top: 1px solid var(--border); padding: 2rem 0; color: var(--muted); font-size: 0.85rem; }
-  footer.site .container { display: flex; flex-wrap: wrap; gap: 0.8rem; justify-content: space-between; }
-  @media (max-width: 640px) {
-    .nav-links { display: none; }
-    .hero { padding: 3.2rem 0 2.6rem; }
-    .cta-band { padding: 1.8rem; }
+  .cta-label {
+    font-size: clamp(0.66rem, 1.7vw, 0.85rem);
+    opacity: 0.92;
+    margin: 0;
+    max-width: 34ch;
+  }
+  .cta-button {
+    display: inline-block;
+    padding: clamp(8px, 2vw, 14px) clamp(14px, 3vw, 26px);
+    border-radius: 999px;
+    background: #ffffff;
+    color: #14142b;
+    font-weight: 700;
+    font-size: clamp(0.78rem, 2vw, 0.98rem);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .cta-button:focus-visible { outline: 3px solid var(--on-accent); outline-offset: 2px; }
+  .poster-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: clamp(8px, 2vw, 16px);
+    font-size: clamp(0.58rem, 1.5vw, 0.72rem);
+    color: var(--ink-soft);
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .poster { box-shadow: none; border: none; border-radius: 0; width: 100%; }
+  }
 </style>
 </head>
 <body>
-<header class="site">
-  <div class="container nav">
-    <div class="brand-mark"><span class="dot" aria-hidden="true">${brandIcon}</span>${escapeHtml(draft.brand.name)}</div>
-    <nav class="nav-links" aria-label="Navigasi utama">
-      <a href="#fitur">Fitur</a>
-      <a href="#faq">FAQ</a>
-      <a href="#kontak">Kontak</a>
-    </nav>
-    <a class="btn btn-primary" href="#kontak">${escapeHtml(draft.heroSection.ctaText)}</a>
+<main class="poster" role="article" aria-label="Poster ${escapeHtml(draft.brand.name)}">
+  <div class="poster-top">
+    <span class="badge">${escapeHtml(draft.poster.badge)}</span>
+    <span class="brand">${escapeHtml(draft.brand.name)}</span>
   </div>
-</header>
 
-<main>
-  <section class="hero">
-    <div class="container">
-      <span class="badge">${escapeHtml(draft.heroSection.badge)}</span>
-      <h1>${escapeHtml(draft.heroSection.headline)}</h1>
-      <p class="lead">${escapeHtml(draft.heroSection.subheadline)}</p>
-      <div class="hero-actions">
-        <a class="btn btn-primary" href="#kontak">${escapeHtml(draft.heroSection.ctaText)}</a>
-        <a class="btn btn-ghost" href="#fitur">Lihat Keunggulan</a>
-      </div>
-    </div>
-  </section>
+  <h1 class="headline">${escapeHtml(draft.poster.headline)}</h1>
+  <p class="subheadline">${escapeHtml(draft.poster.subheadline)}</p>
 
-  <section class="block" id="tentang">
-    <div class="container">
-      <h2>Tentang ${escapeHtml(draft.brand.name)}</h2>
-      <p class="section-lead">${escapeHtml(draft.brand.about)}</p>
-    </div>
-  </section>
+  <div class="points">
+${pointsHtml}
+  </div>
 
-  <section class="block" id="fitur">
-    <div class="container">
-      <h2>Kenapa Memilih Kami</h2>
-      <p class="section-lead">Tiga alasan utama pelanggan ${escapeHtml(draft.brand.name)} bertahan.</p>
-      <div class="grid">
-${featuresHtml}
-      </div>
-    </div>
-  </section>
+  <div class="cta">
+    <p class="cta-label">${escapeHtml(draft.brand.tagline)}</p>
+    <a class="cta-button" href="#pesan">${escapeHtml(draft.poster.ctaText)}</a>
+  </div>
 
-  <section class="block" id="faq">
-    <div class="container">
-      <h2>Pertanyaan Umum</h2>
-      <p class="section-lead">Yang paling sering ditanyakan sebelum memesan.</p>
-      ${faqHtml}
-    </div>
-  </section>
-
-  <section class="block" id="kontak">
-    <div class="container">
-      <div class="cta-band">
-        <h2>Siap Memulai?</h2>
-        <p>${escapeHtml(draft.brand.tagline)}</p>
-        <a class="btn" href="mailto:halo@example.com">${escapeHtml(draft.heroSection.ctaText)}</a>
-      </div>
-    </div>
-  </section>
+  <footer class="poster-footer">
+    <span>${escapeHtml(draft.brand.about)}</span>
+    <span>${escapeHtml(templateName)} · Aether Creative</span>
+  </footer>
 </main>
-
-<footer class="site">
-  <div class="container">
-    <span>© ${new Date().getFullYear()} ${escapeHtml(draft.brand.name)}. Seluruh hak cipta dilindungi.</span>
-    <span>Template: ${escapeHtml(templateName)} · Dibuat dengan CraftAI Studio</span>
-  </div>
-</footer>
 </body>
 </html>
 `;

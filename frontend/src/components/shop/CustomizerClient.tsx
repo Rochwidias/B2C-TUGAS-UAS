@@ -6,20 +6,25 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { DraftPreview, EngineBadge } from './DraftPreview';
 import {
-  PACKAGES,
+  THEME_OPTIONS,
   type Brief,
   type Draft,
   type DraftResponse,
   type Order,
   type OrderCreatedResponse,
+  type PackageOption,
   type Template,
   type ThemeColorKey,
   categoryLabel,
   formatRupiah,
+  packageEta,
+  packageGuarantee,
+  packageSummary,
   readJson,
 } from './types';
 import { API_BASE } from '@/lib/api';
-import { FALLBACK_TEMPLATES, fetchCatalog } from '@/lib/catalog';
+import { FALLBACK_TEMPLATES, fetchCatalogResult } from '@/lib/catalog';
+import { fetchPackages } from '@/lib/packages';
 
 // Batas karakter brief. Dipakai bersama oleh validasi, penghitung, dan
 // placeholder supaya angka maksimum hanya ditulis di satu tempat.
@@ -28,50 +33,76 @@ const DESC_MAX = 800;
 const BRAND_MIN = 2;
 
 function briefKey(templateId: string): string {
+  return `aether-brief-${templateId}`;
+}
+
+function legacyBriefKey(templateId: string): string {
   return `craftai-brief-${templateId}`;
 }
 
 // Draft brief disimpan di localStorage supaya formulir yang sudah diisi tidak
-// hilang saat pindah halaman atau menutup tab.
+// hilang saat pindah halaman atau menutup tab. Key lama dibaca sebagai fallback
+// supaya isian pelanggan sebelum redesign tidak lenyap.
 function loadBriefDraft(templateId: string): Partial<Brief> | null {
-  try {
-    const raw = localStorage.getItem(briefKey(templateId));
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as Partial<Brief>) : null;
-  } catch {
-    return null;
+  for (const key of [briefKey(templateId), legacyBriefKey(templateId)]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed as Partial<Brief>;
+    } catch {
+      // Storage diblokir atau JSON rusak: lanjut ke key berikutnya.
+    }
   }
+  return null;
 }
-
-const THEME_OPTIONS: { value: ThemeColorKey; label: string }[] = [
-  { value: 'amber', label: 'Warm Amber & Coffee' },
-  { value: 'indigo', label: 'Tech Indigo & Blue' },
-  { value: 'emerald', label: 'Fresh Emerald & Green' },
-  { value: 'rose', label: 'Elegant Rose & Pink' },
-];
 
 const TONE_OPTIONS = ['Profesional', 'Santai & ramah', 'Energik & muda', 'Elegan & premium'];
 
-// Prefill per kategori: contoh brief yang masuk akal untuk bisnis itu, bukan
-// data pelanggan sungguhan. Kolom tetap bisa dikosongkan.
+// Prefill per segmen: contoh brief yang masuk akal untuk usaha itu, bukan data
+// pelanggan sungguhan. Kolom tetap bisa dikosongkan.
 const PRESET: Record<string, { brandName: string; tagline: string; description: string; ctaText: string }> = {
+  kuliner: {
+    brandName: 'Kopi Senja Utama',
+    tagline: 'Rasa Otentik Kopi Nusantara di Jantung Kota',
+    description:
+      'Kami menyajikan biji kopi single origin roast medium-dark dengan suasana nyaman untuk nugas dan santai. Buka tiap hari 08.00 - 23.00, melayani pesan antar.',
+    ctaText: 'Pesan Sekarang',
+  },
+  kreator: {
+    brandName: 'Dimas Studio & Design',
+    tagline: 'Karya Visual yang Bekerja untuk Brand Anda',
+    description:
+      'Studio desain independen yang fokus pada identitas visual, konten media sosial, dan materi kampanye untuk brand lokal dan startup.',
+    ctaText: 'Ajak Kolaborasi',
+  },
+  toko: {
+    brandName: 'UrbanStreet Wear',
+    tagline: 'Fashion Streetwear Lokal Berkualitas',
+    description:
+      'Produksi limited edition, bahan combed 30s, pengiriman ke seluruh Indonesia lewat kurir reguler dan instan.',
+    ctaText: 'Beli via WhatsApp',
+  },
+  // Kategori lama pada database yang belum dimigrasi.
   fnb: {
     brandName: 'Kopi Senja Utama',
     tagline: 'Rasa Otentik Kopi Nusantara di Jantung Kota',
-    description: 'Kami menyajikan biji kopi single origin roast medium-dark dengan suasana nyaman untuk nugas dan santai. Buka tiap hari 08.00 - 23.00.',
-    ctaText: 'Pesan Meja Sekarang',
+    description:
+      'Kami menyajikan biji kopi single origin roast medium-dark dengan suasana nyaman untuk nugas dan santai. Buka tiap hari 08.00 - 23.00, melayani pesan antar.',
+    ctaText: 'Pesan Sekarang',
   },
   portfolio: {
     brandName: 'Dimas Studio & Design',
-    tagline: 'Crafting Digital Experiences that Convert',
-    description: 'Studio desain independen yang fokus pada landing page, identitas visual, dan produk digital untuk startup lokal.',
-    ctaText: 'Lihat Karya Saya',
+    tagline: 'Karya Visual yang Bekerja untuk Brand Anda',
+    description:
+      'Studio desain independen yang fokus pada identitas visual, konten media sosial, dan materi kampanye untuk brand lokal dan startup.',
+    ctaText: 'Ajak Kolaborasi',
   },
   shop: {
     brandName: 'UrbanStreet Wear',
-    tagline: 'Fashion Streetwear Lokal Berkualitas Dunia',
-    description: 'Produksi limited edition, bahan combed 30s, pengiriman ke seluruh Indonesia via kurir reguler dan instan.',
+    tagline: 'Fashion Streetwear Lokal Berkualitas',
+    description:
+      'Produksi limited edition, bahan combed 30s, pengiriman ke seluruh Indonesia lewat kurir reguler dan instan.',
     ctaText: 'Beli via WhatsApp',
   },
 };
@@ -80,7 +111,7 @@ const inputClass =
   'w-full min-h-11 border border-rule bg-paper px-3 py-2 text-sm text-ink transition-colors placeholder:text-ink-soft/70 focus:border-ink focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const labelClass = 'mb-1.5 block font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft';
 
-// Kelas input dengan status validasi: garis danger + ikon saat field sudah
+// Kelas input dengan status validasi: garis danger + pesan saat field sudah
 // disentuh tapi masih berisi kesalahan.
 function fieldClass(invalid: boolean): string {
   return invalid ? `${inputClass} border-danger` : inputClass;
@@ -97,35 +128,44 @@ type OrderState =
   | { phase: 'loading' }
   | { phase: 'error'; message: string };
 
+type PackagesState =
+  | { phase: 'loading' }
+  | { phase: 'ready'; packages: PackageOption[] }
+  | { phase: 'error'; message: string };
+
 export function CustomizerClient({ templateId }: { templateId: string }) {
   const router = useRouter();
   // Judul/header langsung terisi dari data bawaan: halaman tidak pernah
   // menampilkan "Memuat template" walau backend lambat. Data terbaru dari
-  // server menyusul lewat fetchCatalog() di bawah.
+  // server menyusul lewat fetchCatalogResult() di bawah.
   const [template, setTemplate] = useState<Template | null>(
     () => FALLBACK_TEMPLATES.find((t) => t.id === templateId) ?? null,
   );
   const [templateError, setTemplateError] = useState<string | null>(null);
+  const [catalogNote, setCatalogNote] = useState<string | null>(null);
 
   const [brief, setBrief] = useState<Brief>({
     templateId,
     brandName: '',
     tagline: '',
     description: '',
-    themeColor: 'amber',
+    themeColor: 'violet',
     ctaText: '',
     toneOfVoice: 'Profesional',
   });
 
   const [gen, setGen] = useState<GenState>({ phase: 'idle' });
   const [order, setOrder] = useState<OrderState>({ phase: 'idle' });
-  const [pkg, setPkg] = useState('pro');
+  const [pkgState, setPkgState] = useState<PackagesState>({ phase: 'loading' });
+  const [pkgKey, setPkgKey] = useState<string | null>(null);
   const [contact, setContact] = useState({ name: '', whatsapp: '', email: '' });
   // true setelah pengguna menyentuh sebuah field; pesan validasi baru muncul
   // setelah itu supaya formulir tidak terlihat "merah" sebelum diisi.
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const toast = useToast();
-
+  // Rekomendasi paket dari data template, dibaca lewat ref supaya pemilihan
+  // awal tidak memicu fetch paket kedua saat data template menyusul.
+  const recommendedRef = useRef<string | null>(null);
 
   // Simpan draft setiap kali brief berubah (debounce ringan) agar tidak hilang.
   // Simpanan terakhir WAJIB di-flush saat unmount, bukan dibatalkan, supaya
@@ -139,7 +179,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     briefRef.current = brief;
   }, [brief]);
 
-  const flushDraft = () => {
+  const persistBrief = () => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
@@ -167,43 +207,45 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
         clearTimeout(saveTimer.current);
         saveTimer.current = null;
       }
-      try {
-        localStorage.setItem(briefKey(templateId), JSON.stringify(briefRef.current));
-      } catch {
-        // Penyimpanan diblokir: abaikan.
-      }
+      persistBrief();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brief, templateId]);
 
   // Simpan juga ketika tab disembunyikan/ditutup: debounce bisa belum jalan.
   useEffect(() => {
     const onHide = () => {
-      if (document.visibilityState === 'hidden') flushDraft();
+      if (document.visibilityState === 'hidden') persistBrief();
     };
     document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', flushDraft);
+    window.addEventListener('pagehide', persistBrief);
     return () => {
       document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', flushDraft);
+      window.removeEventListener('pagehide', persistBrief);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
   useEffect(() => {
     let alive = true;
-    // Katalog selalu mengembalikan daftar (jatuh ke data bawaan bila backend
-    // tidak terjangkau), jadi hanya id yang benar-benar tak dikenal yang
-    // memunculkan pesan "tidak ditemukan".
-    fetchCatalog().then((templates) => {
+    // fetchCatalogResult membedakan "server gagal" dan "id tak dikenal",
+    // sehingga kegagalan katalog tidak dianggap template tidak ada.
+    fetchCatalogResult().then((result) => {
       if (!alive) return;
-      const found = templates.find((t) => t.id === templateId);
+      const found = result.templates.find((t) => t.id === templateId);
       if (!found) {
         setTemplateError('Template tidak ditemukan. Pilih ulang dari katalog.');
         return;
       }
       setTemplate(found);
+      recommendedRef.current = found.recommendedPackage ?? null;
+      setCatalogNote(
+        result.ok
+          ? null
+          : `${result.error ?? 'Katalog tidak terhubung ke server.'} Contoh bawaan dipakai sementara.`,
+      );
       // Pulihkan draft tersimpan hanya untuk kolom yang masih kosong, lalu
-      // isi preset template bila kolom tetap kosong. Satu updater, satu render.
+      // isi preset segmen bila kolom tetap kosong. Satu updater, satu render.
       const saved = loadBriefDraft(templateId);
       setBrief((prev) => {
         const filled = (v: string | undefined) => typeof v === 'string' && v.trim() !== '';
@@ -222,7 +264,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
           (value) => value.trim() === '',
         );
         if (!untouched || prev.templateId === templateId) return restored;
-        const preset = PRESET[found.category] ?? PRESET.fnb;
+        const preset = PRESET[found.category] ?? PRESET.kuliner;
         return { ...restored, ...preset };
       });
     });
@@ -230,6 +272,48 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
       alive = false;
     };
   }, [templateId]);
+
+  // Kartu paket dari GET /api/packages: satu-satunya sumber harga, kuota,
+  // estimasi, dan garansi di halaman ini (docs/REDESIGN.md §2).
+  const loadPackages = async () => {
+    setPkgState({ phase: 'loading' });
+    const result = await fetchPackages();
+    if (!result.ok) {
+      setPkgState({ phase: 'error', message: result.error ?? 'Daftar paket tidak bisa dimuat.' });
+      return;
+    }
+    setPkgState({ phase: 'ready', packages: result.packages });
+    // Pilihan awal mengikuti rekomendasi paket untuk segmen ini bila ada.
+    setPkgKey((current) => {
+      if (current && result.packages.some((pkg) => pkg.key === current)) return current;
+      const suggested = template?.recommendedPackage;
+      const preferred = suggested ? result.packages.find((pkg) => pkg.key === suggested) : undefined;
+      return (preferred ?? result.packages[0]).key;
+    });
+  };
+
+  // Pemuatan awal kartu paket memakai rantai promise (tanpa setState sinkron
+  // di dalam effect); loadPackages() tetap dipakai tombol coba lagi.
+  useEffect(() => {
+    let alive = true;
+    fetchPackages().then((result) => {
+      if (!alive) return;
+      if (!result.ok) {
+        setPkgState({ phase: 'error', message: result.error ?? 'Daftar paket tidak bisa dimuat.' });
+        return;
+      }
+      setPkgState({ phase: 'ready', packages: result.packages });
+      setPkgKey((current) => {
+        if (current && result.packages.some((pkg) => pkg.key === current)) return current;
+        const suggested = recommendedRef.current;
+        const preferred = suggested ? result.packages.find((pkg) => pkg.key === suggested) : undefined;
+        return (preferred ?? result.packages[0]).key;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function update<K extends keyof Brief>(key: K, value: Brief[K]) {
     setBrief((prev) => ({ ...prev, [key]: value }));
@@ -260,9 +344,10 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
   const briefValid = Object.keys(errors).length === 0;
 
-  // dipakai baik sebagai submit handler maupun tombol "coba lagi"
-  async function generate(e: { preventDefault: () => void }) {
-    e.preventDefault();
+  // Dipakai baik sebagai submit handler maupun tombol "coba lagi" di panel
+  // preview (oleh sebab itu parameter event bersifat opsional).
+  async function generate(e?: { preventDefault: () => void }) {
+    e?.preventDefault();
     // Tandai semua field tersentuh agar pesan validasi tampil saat submit diblokir.
     setTouched({
       brandName: true,
@@ -295,10 +380,8 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
         engine: result.data.engine,
       });
       toast.success(
-        'Draft berhasil dibuat',
-        result.data.engine === 'gemini'
-          ? 'Disusun oleh Gemini.'
-          : 'Disusun oleh generator lokal.',
+        'Draft poster berhasil dibuat',
+        result.data.engine === 'gemini' ? 'Disusun oleh Gemini.' : 'Disusun oleh generator lokal.',
       );
     } catch {
       setGen({ phase: 'error', message: 'Jaringan terputus saat menghubungi server. Coba lagi.' });
@@ -319,16 +402,21 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
       toast.error('Format email belum benar', 'Contoh: nama@email.com');
       return;
     }
+    const selected = pkgState.phase === 'ready' ? pkgState.packages.find((pkg) => pkg.key === pkgKey) : null;
+    if (!selected) {
+      setOrder({ phase: 'error', message: 'Pilih paket yang tersedia sebelum mengirim pesanan.' });
+      toast.error('Paket belum dipilih', 'Muat ulang daftar paket lalu pilih salah satu.');
+      return;
+    }
     setOrder({ phase: 'loading' });
     try {
-      const selected = PACKAGES.find((p) => p.id === pkg) ?? PACKAGES[0];
       const res = await fetch(`${API_BASE}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           draftId: gen.draftId,
           templateId,
-          packageName: selected.name,
+          packageKey: selected.key,
           contactName: contact.name.trim(),
           contactWhatsapp: contact.whatsapp.trim(),
           contactEmail: contact.email.trim(),
@@ -354,7 +442,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
       } catch {
         // Penyimpanan diblokir: lanjutkan redirect tanpa saran.
       }
-      toast.success('Pesanan terkirim', `Nomor ${result.data.orderNumber} menuju developer.`);
+      toast.success('Pesanan terkirim', `Nomor ${result.data.orderNumber} masuk antrean editor.`);
       router.push(`/orders/${result.data.order.id}`);
     } catch {
       setOrder({ phase: 'error', message: 'Jaringan terputus saat mengirim pesanan. Coba lagi.' });
@@ -362,7 +450,8 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     }
   }
 
-  const selectedPkg = PACKAGES.find((p) => p.id === pkg) ?? PACKAGES[0];
+  const packages = pkgState.phase === 'ready' ? pkgState.packages : [];
+  const selectedPkg = packages.find((pkg) => pkg.key === pkgKey) ?? null;
 
   if (templateError) {
     return (
@@ -374,8 +463,8 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
               Customizer tidak bisa dibuka: {templateError}
             </p>
             <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
-              Penyebab paling umum: id template pada URL tidak ada lagi di katalog, atau permintaan
-              ke server gagal diproses.
+              Penyebab paling umum: id contoh poster pada URL tidak ada lagi di katalog, atau
+              permintaan ke server gagal diproses.
             </p>
             <Link
               href="/#katalog"
@@ -402,13 +491,13 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
               <span aria-hidden="true">&larr;</span> Kembali ke katalog
             </Link>
             <h1 className="mt-2 text-[30px] font-semibold leading-[1.02] tracking-tight sm:text-[42px]">
-              {template ? template.name : 'Memuat template'}
-              {template ? <span className="text-ink-soft">, lalu AI menyusun draftnya.</span> : null}
+              {template ? template.name : 'Memuat contoh poster'}
+              {template ? <span className="text-ink-soft">, lalu AI menyusun draft posternya.</span> : null}
             </h1>
             <p className="mt-3 font-mono text-[11px] leading-relaxed text-ink-soft">
               {template
-                ? `${categoryLabel(template.category)} / id ${template.id} / template ${formatRupiah(template.base_price)}`
-                : 'Mengambil detail template dari server'}
+                ? `${categoryLabel(template.category)} / id ${template.id} / harga satuan ${formatRupiah(template.base_price)}`
+                : 'Mengambil detail contoh poster dari server'}
             </p>
           </div>
 
@@ -416,22 +505,33 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
               Paket terpilih
             </dt>
-            <dd className="font-mono text-[10px] text-ink">{selectedPkg.name}</dd>
-            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
-              Biaya eksekusi
-            </dt>
-            <dd className="font-mono text-[15px] text-ink">{formatRupiah(selectedPkg.price)}</dd>
+            <dd className="font-mono text-[10px] text-ink">
+              {selectedPkg ? selectedPkg.name : pkgState.phase === 'error' ? 'belum tersedia' : 'memuat…'}
+            </dd>
+            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">Total bayar</dt>
+            <dd className="font-mono text-[15px] text-ink">
+              {selectedPkg ? formatRupiah(selectedPkg.price) : '—'}
+            </dd>
           </dl>
         </div>
+
+        {catalogNote && (
+          <p
+            role="status"
+            className="mt-4 border border-warn bg-surface px-4 py-3 font-mono text-[11px] leading-relaxed text-warn"
+          >
+            {catalogNote}
+          </p>
+        )}
 
         <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-10">
           <div className="flex flex-col gap-8">
             {/* Formulir brief */}
             <form onSubmit={generate} className="border border-rule bg-surface">
               <div className="flex items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
-                <h2 className="text-[15px] font-semibold">Brief modifikasi</h2>
+                <h2 className="text-[15px] font-semibold">Brief merek</h2>
                 <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
-                  Langkah 02
+                  Langkah 01
                 </span>
               </div>
 
@@ -515,7 +615,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                     onChange={(e) => update('description', e.target.value)}
                     onBlur={() => setTouched((p) => ({ ...p, description: true }))}
                     className={`${fieldClass(touched.description && Boolean(errors.description))} min-h-[104px] resize-y`}
-                    placeholder="Ceritakan produk, jam operasional, atau keunggulan bisnis Anda."
+                    placeholder="Ceritakan produk, jam operasional, atau keunggulan usaha Anda."
                   />
                   <div className="mt-1.5 flex items-start justify-between gap-3">
                     {touched.description && errors.description ? (
@@ -533,7 +633,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label htmlFor="brief-color" className={labelClass}>
-                      Warna aksen
+                      Warna aksen poster
                     </label>
                     <select
                       id="brief-color"
@@ -616,7 +716,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                       <span>AI sedang menyusun…</span>
                     </>
                   ) : (
-                    <span>Generate Modifikasi AI</span>
+                    <span>Generate Draft Poster AI</span>
                   )}
                 </button>
                 {!briefValid && (
@@ -625,8 +725,9 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                   </p>
                 )}
                 <p className="mt-3 font-mono text-[10px] leading-relaxed text-ink-soft">
-                  Konten disusun di server dari brief ini. Bila API key Gemini tidak tersedia,
-                  generator lokal deterministik dipakai, dan badge engine menyatakan itu apa adanya.
+                  Draft disusun di server dari brief ini. Bila API key Gemini tidak tersedia,
+                  generator lokal deterministik dipakai, dan badge engine menyatakan itu apa
+                  adanya.
                 </p>
               </div>
             </form>
@@ -634,7 +735,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
             {/* Checkout */}
             <form onSubmit={checkout} className="border border-rule bg-surface">
               <div className="flex items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
-                <h2 className="text-[15px] font-semibold">Checkout &amp; kirim ke developer</h2>
+                <h2 className="text-[15px] font-semibold">Checkout &amp; kirim pesanan</h2>
                 <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
                   Langkah 03
                 </span>
@@ -643,44 +744,82 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
               <div className="flex flex-col gap-5 p-5">
                 <p className="text-[13px] leading-relaxed text-ink-soft">
                   {gen.phase === 'done'
-                    ? 'Draft siap dikirim. Pilih paket, lalu isi kontak yang bisa dihubungi developer.'
-                    : 'Tombol kirim aktif setelah draft berhasil dibuat.'}
+                    ? 'Draft siap dikirim. Pilih paket, lalu isi kontak yang bisa dihubungi editor.'
+                    : 'Tombol kirim aktif setelah draft poster berhasil dibuat.'}
                 </p>
 
+                {/* Kartu paket dari GET /api/packages: ETA + garansi tampil
+                    di sini, sebelum tombol bayar. */}
                 <fieldset className="flex flex-col gap-2">
                   <legend className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
-                    Paket eksekusi
+                    Pilih paket
                   </legend>
-                  {PACKAGES.map((p) => {
-                    const active = pkg === p.id;
-                    return (
-                      <label
-                        key={p.id}
-                        className={[
-                          'flex cursor-pointer items-start gap-3 border p-3.5 transition-colors',
-                          active ? 'border-ink bg-paper' : 'border-rule bg-surface hover:border-ink',
-                        ].join(' ')}
+
+                  {pkgState.phase === 'loading' && (
+                    <div aria-busy="true" className="border border-rule bg-paper p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+                        Memuat daftar paket
+                      </p>
+                      <div className="mt-3 h-4 w-1/2 animate-pulse bg-rule" aria-hidden="true" />
+                    </div>
+                  )}
+
+                  {pkgState.phase === 'error' && (
+                    <div role="alert" className="border border-danger bg-paper p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">
+                        Daftar paket tidak tersedia
+                      </p>
+                      <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
+                        {pkgState.message} Harga, estimasi, dan garansi tidak bisa dipastikan sampai
+                        server menjawab.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void loadPackages()}
+                        className="mt-3 inline-flex min-h-11 items-center border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
                       >
-                        <input
-                          type="radio"
-                          name="package"
-                          value={p.id}
-                          checked={active}
-                          onChange={() => setPkg(p.id)}
-                          className="mt-1 size-4 accent-[var(--accent)]"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                            <span className="text-[13px] font-semibold">Paket {p.name}</span>
-                            <span className="font-mono text-[13px]">{formatRupiah(p.price)}</span>
+                        Coba lagi
+                      </button>
+                    </div>
+                  )}
+
+                  {pkgState.phase === 'ready' &&
+                    packages.map((p) => {
+                      const active = pkgKey === p.key;
+                      const eta = packageEta(p);
+                      const guarantee = packageGuarantee(p);
+                      return (
+                        <label
+                          key={p.key}
+                          className={[
+                            'flex cursor-pointer items-start gap-3 border p-3.5 transition-colors',
+                            active ? 'border-ink bg-paper' : 'border-rule bg-surface hover:border-ink',
+                          ].join(' ')}
+                        >
+                          <input
+                            type="radio"
+                            name="package"
+                            value={p.key}
+                            checked={active}
+                            onChange={() => setPkgKey(p.key)}
+                            className="mt-1 size-4 accent-[var(--accent)]"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                              <span className="text-[13px] font-semibold">{p.name}</span>
+                              <span className="font-mono text-[13px]">{formatRupiah(p.price)}</span>
+                            </span>
+                            <span className="mt-1 block text-[12px] leading-relaxed text-ink-soft">
+                              {packageSummary(p)}
+                            </span>
+                            <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-ink-soft">
+                              <span>Estimasi: {eta || '—'}</span>
+                              <span>Garansi: {guarantee || '—'}</span>
+                            </span>
                           </span>
-                          <span className="mt-1 block text-[12px] leading-relaxed text-ink-soft">
-                            {p.summary}
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
+                        </label>
+                      );
+                    })}
                 </fieldset>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -733,11 +872,25 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                   />
                 </div>
 
+                {/* Ringkasan transparansi sebelum bayar. */}
                 <div className="border border-rule bg-paper p-4">
-                  <p className="text-[12px] font-semibold">Yang terjadi setelah tombol kirim</p>
+                  <p className="text-[12px] font-semibold">Sebelum Anda bayar</p>
                   <ul className="mt-2 flex flex-col gap-1.5 text-[12px] leading-relaxed text-ink-soft">
-                    <li>Order dibuat dengan nomor UK-ORD-XXXX dan status Pembayaran.</li>
-                    <li>Developer menulis kode, men-deploy, lalu mengisi URL live dan unduhan.</li>
+                    <li>
+                      {selectedPkg
+                        ? `${selectedPkg.name}: ${formatRupiah(selectedPkg.price)} untuk ${selectedPkg.quota} poster.`
+                        : 'Pilih paket untuk melihat total yang dibayar.'}
+                    </li>
+                    <li>
+                      {selectedPkg && packageEta(selectedPkg)
+                        ? `Estimasi pengerjaan ${packageEta(selectedPkg)}.`
+                        : 'Estimasi pengerjaan ditampilkan setelah daftar paket dimuat.'}
+                    </li>
+                    <li>
+                      {selectedPkg && packageGuarantee(selectedPkg)
+                        ? `Garansi: ${packageGuarantee(selectedPkg)}.`
+                        : 'Garansi revisi mengikuti paket yang dipilih.'}
+                    </li>
                     <li>Pembayaran pada demo ini adalah simulasi, bukan transaksi nyata.</li>
                   </ul>
                 </div>
@@ -753,7 +906,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
                 <button
                   type="submit"
-                  disabled={gen.phase !== 'done' || order.phase === 'loading'}
+                  disabled={gen.phase !== 'done' || order.phase === 'loading' || !selectedPkg}
                   className="inline-flex min-h-12 w-full items-center justify-center gap-2 border border-ink bg-ink px-4 text-sm font-semibold text-paper transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--accent)] disabled:translate-y-0 disabled:border-rule disabled:bg-rule disabled:text-ink-soft disabled:shadow-none"
                 >
                   {order.phase === 'loading' ? (
@@ -765,18 +918,23 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                       <span>Mengirim pesanan</span>
                     </>
                   ) : (
-                    <span>Kirim ke Tim Developer untuk Dikerjakan</span>
+                    <span>Kirim Pesanan untuk Dikerjakan</span>
                   )}
                 </button>
+                {pkgState.phase !== 'ready' && (
+                  <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
+                    Tombol kirim aktif setelah daftar paket berhasil dimuat.
+                  </p>
+                )}
               </div>
             </form>
           </div>
 
-          {/* Lembar preview */}
+          {/* Lembar preview poster */}
           <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
             <div className="flex flex-wrap items-center justify-between gap-3 border border-rule bg-surface px-4 py-2.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">
-                Lembar proof / hasil draft
+                Live preview / poster 4:5
               </span>
               <EngineBadge engine={gen.phase === 'done' ? gen.engine : null} />
             </div>
@@ -788,22 +946,23 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                     Belum ada draft
                   </p>
                   <p className="mt-3 max-w-sm text-[17px] font-semibold leading-snug">
-                    Lembar ini akan berisi halaman hasil olahan AI dari brief Anda.
+                    Panel ini akan menampilkan poster hasil olahan AI dari brief Anda.
                   </p>
                   <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                    Isi brief di kolom kiri, lalu tekan <strong className="text-ink">Generate Modifikasi AI</strong>.
-                    Respons server dirender apa adanya, termasuk bila isinya berupa generator lokal.
+                    Isi brief di kolom kiri, lalu tekan{' '}
+                    <strong className="text-ink">Generate Draft Poster AI</strong>. Respons server
+                    dirender apa adanya, termasuk bila isinya berupa generator lokal.
                   </p>
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-rule pt-4 font-mono text-[10px] text-ink-soft">
-                  <dt>brand.name</dt>
+                  <dt>poster.badge</dt>
                   <dd>isi brief</dd>
-                  <dt>theme.primaryColor</dt>
-                  <dd>pilihan warna</dd>
-                  <dt>features</dt>
-                  <dd>3 item</dd>
-                  <dt>faq</dt>
-                  <dd>2 item</dd>
+                  <dt>poster.headline</dt>
+                  <dd>judul besar</dd>
+                  <dt>poster.ctaText</dt>
+                  <dd>tombol ajakan</dd>
+                  <dt>points</dt>
+                  <dd>tepat 3 item</dd>
                 </dl>
               </div>
             )}
@@ -813,18 +972,21 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                 className="min-h-[420px] animate-pulse border border-t-0 border-rule bg-paper p-6"
                 aria-busy="true"
               >
-                <span className="sr-only">Server sedang menyusun draft dari brief Anda</span>
-                <div className="h-3 w-40 bg-rule" aria-hidden="true" />
-                <div className="mt-4 h-6 w-3/4 bg-rule" aria-hidden="true" />
-                <div className="mt-3 h-3 w-full bg-rule" aria-hidden="true" />
-                <div className="mt-2 h-3 w-2/3 bg-rule" aria-hidden="true" />
-                <div className="mt-6 grid grid-cols-3 gap-3" aria-hidden="true">
-                  <div className="h-20 border border-rule bg-surface" />
-                  <div className="h-20 border border-rule bg-surface" />
-                  <div className="h-20 border border-rule bg-surface" />
+                <span className="sr-only">Server sedang menyusun draft poster dari brief Anda</span>
+                <div className="mx-auto aspect-[4/5] w-full max-w-[420px] border border-rule bg-surface p-5">
+                  <div className="h-3 w-32 bg-rule" aria-hidden="true" />
+                  <div className="mt-6 h-6 w-3/4 bg-rule" aria-hidden="true" />
+                  <div className="mt-3 h-3 w-full bg-rule" aria-hidden="true" />
+                  <div className="mt-2 h-3 w-2/3 bg-rule" aria-hidden="true" />
+                  <div className="mt-6 h-8 w-40 bg-rule" aria-hidden="true" />
+                  <div className="mt-8 grid grid-cols-3 gap-3" aria-hidden="true">
+                    <div className="h-16 bg-rule" />
+                    <div className="h-16 bg-rule" />
+                    <div className="h-16 bg-rule" />
+                  </div>
                 </div>
                 <p className="mt-6 font-mono text-[10px] text-ink-soft">
-                  Menyusun hero, tiga fitur, dan dua tanya jawab.
+                  Menyusun badge, headline, subheadline, tombol ajakan, dan tiga poin.
                 </p>
               </div>
             )}
@@ -847,7 +1009,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                 </div>
                 <button
                   type="button"
-                  onClick={generate}
+                  onClick={() => void generate()}
                   className="inline-flex min-h-11 w-fit items-center border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
                 >
                   Coba lagi
@@ -860,7 +1022,7 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
                 <DraftPreview draft={gen.content} />
                 <div className="flex flex-wrap items-center justify-between gap-2 border-x border-b border-rule bg-surface px-4 py-2.5 font-mono text-[10px] text-ink-soft">
                   <span>draftId {gen.draftId}</span>
-                  <span>Checkout di kolom kiri mengirim draft ini ke developer.</span>
+                  <span>Checkout di kolom kiri mengirim draft ini ke editor.</span>
                 </div>
               </div>
             )}

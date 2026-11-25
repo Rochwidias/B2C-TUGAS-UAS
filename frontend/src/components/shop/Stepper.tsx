@@ -1,5 +1,7 @@
 import { STATUS_STEPS, type OrderLog, type OrderStatus, statusLabel } from './types';
 
+// Format timestamp tahap: ringkas tetapi tetap lokal (id-ID).
+
 function fmt(ts: string): string {
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return ts;
@@ -8,12 +10,21 @@ function fmt(ts: string): string {
 
 // Stepper = garis produksi: satu jalur horizontal dengan angka ledger, penanda
 // tahap berbentuk kotak (bukan pil), dan cap status mono di bawahnya.
+// Tiap tahap menampilkan timestamp pertama kali status itu dicapai, diambil
+// dari order_logs — bukan waktu muat halaman.
 export function Stepper({ status, logs }: { status: OrderStatus; logs?: OrderLog[] }) {
   const currentIndex = STATUS_STEPS.findIndex((s) => s.key === status);
   const noteByStep = new Map<string, string>();
+  const timeByStep = new Map<string, string>();
   (logs ?? []).forEach((log) => {
     if (log.developer_note) noteByStep.set(log.status_to, log.developer_note);
+    // Catatan pertama = saat tahap itu benar-benar dicapai.
+    if (!timeByStep.has(log.status_to)) timeByStep.set(log.status_to, fmt(log.timestamp));
   });
+  // Tahap "Brief diterima" sering tidak punya baris log tersendiri (log pertama
+  // baru tercatat saat berpindah ke Pembayaran), jadi pakai waktu log paling
+  // awal — tetap waktu nyata dari database, bukan waktu muat halaman.
+  const firstLogTime = (logs ?? []).length > 0 ? fmt((logs ?? [])[0].timestamp) : null;
 
   return (
     <div>
@@ -58,7 +69,10 @@ export function Stepper({ status, logs }: { status: OrderStatus; logs?: OrderLog
                 {step.label}
               </p>
               <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
-                {noteByStep.has(step.key) ? noteByStep.get(step.key) : step.hint}
+                {timeByStep.get(step.key) ?? (state === 'done' ? firstLogTime ?? 'belum tercatat' : 'belum tercatat')}
+              </p>
+              <p className="font-mono text-[10px] leading-relaxed text-ink-soft">
+                {noteByStep.get(step.key) ?? step.hint}
               </p>
             </li>
           );

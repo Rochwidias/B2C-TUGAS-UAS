@@ -6,7 +6,7 @@ import AdminBoard from '@/components/admin/AdminBoard';
 export const metadata: Metadata = {
   title: 'Papan Pesanan',
   description:
-    'Kanban pesanan CraftAI Studio untuk tim developer dan admin: statistik order, pencarian, filter status, dan pemindahan tahap produksi.',
+    'Kanban pesanan Aether Creative untuk tim editor dan admin: statistik order, pencarian, filter status, sisa kuota paket, dan pemindahan tahap produksi.',
   // Panel internal: jangan pernah masuk indeks mesin telusur.
   robots: { index: false, follow: false },
 };

@@ -1,10 +1,10 @@
-# CraftAI Studio — Backend
+# Aether Creative — Backend
 
-API Express + `node:sqlite` untuk layanan kustomisasi template website
-berbantuan AI. Semua endpoint `/api/*` hidup di sini, port **4000**.
+API Express + `node:sqlite` untuk **platform pembuatan poster** Aether Creative.
+Semua endpoint `/api/*` hidup di sini, port **4000**.
 
 Stack: **Express 4 + node:sqlite (built-in Node)**, AI lewat REST Gemini dengan
-fallback generator lokal deterministik.
+fallback generator lokal deterministik (konten poster dibuat dari brief customer).
 
 ## Menjalankan
 
@@ -15,7 +15,7 @@ npm start              # produksi, :4000 (butuh npm run build dulu)
 npm run dev            # tsx watch, pengembangan
 ```
 
-Konfigurasi lewat environment (contoh `.env`):
+Konfigurasi lewat environment:
 
 | Var | Isi |
 |---|---|
@@ -23,40 +23,53 @@ Konfigurasi lewat environment (contoh `.env`):
 | `ADMIN_PASSWORD` | password back-office (default `admin123`) |
 | `GEMINI_API_KEY` | opsional; kosong = generator lokal |
 | `FRONTEND_ORIGIN` | origin frontend tambahan untuk CORS |
-| `PACKAGE_BASIC_PRICE` dst | harga paket (default 150000/250000/350000) |
+| `DB_DIR` | lokasi file sqlite (default `backend/data`) |
+| `NODE_ENV` | `production` mengaktifkan `trust proxy` |
+
+Harga, estimasi, dan garansi **tidak** lewat env — semuanya terpusat di
+`src/lib/packages.ts` dan disajikan lewat `GET /api/packages`.
 
 ## Struktur
 
 ```
 src/
   index.ts             server HTTP: CORS, cookie, security headers, mount routes
-  types.ts             kontrak domain (Order, Template, Draft, OrderLog)
+  types.ts             kontrak domain (Order, Template, Draft, OrderLog, Package)
   routes/
-    templates.ts       GET  /api/templates
-    drafts.ts          POST /api/drafts
+    templates.ts       GET  /api/templates            (termasuk recommendedPackage)
+    packages.ts        GET  /api/packages             (sumber harga/ETA/garansi)
+    drafts.ts          POST /api/drafts               (draft poster)
     orders.ts          POST /api/orders · GET /api/orders?number=
                        GET|PATCH /api/orders/:id
+                       POST /api/orders/:id/briefs    (kuota paket hemat)
+                       POST /api/orders/:id/revision  (minta revisi)
     delivery.ts        PUT  /api/orders/:id/delivery
-    admin.ts           POST /api/admin/login · GET /api/admin/orders|stats
-    export.ts          GET  /api/export/:draftId (HTML attachment)
+    admin.ts           POST /api/admin/login · GET /api/admin/session
+                       GET /api/admin/orders|stats
+    export.ts          GET  /api/export/:draftId (HTML poster attachment)
   services/
-    orders.ts          logika checkout & lacak order
+    orders.ts          checkout, kuota, brief tambahan, revisi, lacak order
     stats.ts           agregat statistik admin
-  lib/                 db, ai, render, validate, security, ratelimit, http
+  lib/                 packages, db, ai, render, validate, security, ratelimit, http
   middleware/          adminAuth (verifikasi token sesi)
-data/app.db            sqlite, auto-create + seed saat pertama diakses
+data/app.db            sqlite, auto-create + migrasi idempoten + seed idempoten
 ```
 
 ## Keamanan
 
 - Gate admin di setiap route tulis (`PATCH /api/orders/:id`,
   `PUT /api/orders/:id/delivery`, `/api/admin/*`) — 401 tanpa sesi valid.
-- Rate limit per IP: login 6/15 menit, draft AI 8/5 menit, checkout 5/10 menit,
-  lacak order 20/menit, tulis admin 60/menit (429 + sisa detik).
-- Batas panjang input terpusat di `src/lib/security.ts`; WhatsApp dinormalkan
-  ke `08xx`; nomor order unik dengan retry saat tabrakan.
+- `GET /api/admin/session` dipakai `frontend/middleware.ts` untuk memverifikasi
+  sesi di satu tempat (backend), sehingga `ADMIN_PASSWORD` cukup di satu env.
+- Rate limit per IP (kunci hanya dari `req.ip`, `X-Forwarded-For` tidak
+  dipercaya): login 6/15 menit, draft AI 8/5 menit, checkout 5/10 menit,
+  lacak order 20/menit, tulis admin 60/menit, tulis pelanggan (brief/revisi)
+  10/menit. Lewat batas → 429 + `retryAfterSeconds` + header `Retry-After`.
+- Batas panjang & sanitasi input terpusat di `src/lib/security.ts`; WhatsApp
+  dinormalkan ke `08xx`; nomor order unik dengan retry saat tabraban.
 - Security headers + `X-Powered-By` dihapus; CORS hanya origin frontend.
 
-Kontrak API lengkap: [`../docs/SPEC.md`](../docs/SPEC.md).
+Kontrak API lengkap: [`../docs/REDESIGN.md`](../docs/REDESIGN.md) (terbaru) dan
+[`../docs/SPEC.md`](../docs/SPEC.md) (sejauh tidak bertentangan).
 Deploy produksi (Render + Vercel): [`../docs/DEPLOY.md`](../docs/DEPLOY.md)
 — blueprint `render.yaml`, `DB_DIR` untuk disk persistent, dan set `FRONTEND_ORIGIN`.

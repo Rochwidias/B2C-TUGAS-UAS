@@ -3,12 +3,8 @@ import { CustomizerClient } from '@/components/shop/CustomizerClient';
 import { Footer } from '@/components/shop/Footer';
 import { Header } from '@/components/shop/Header';
 import { type Template } from '@/components/shop/types';
+import { API_BASE_SERVER } from '@/lib/api';
 import { FALLBACK_TEMPLATES, fetchCatalog } from '@/lib/catalog';
-
-// Base URL backend (lihat src/lib/api.ts). SSR fetch harus absolut: pakai
-// NEXT_PUBLIC_API_URL bila diisi, lalu BACKEND_ORIGIN (server-side di Vercel),
-// default localhost untuk dev.
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_ORIGIN ?? 'http://localhost:4000';
 
 /**
  * Cari satu template: data terbaru dari backend bila terjangkau, lalu jatuh ke
@@ -22,7 +18,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_ORIGIN ?
 async function findTemplate(templateId: string): Promise<Template | null> {
   'use cache';
   try {
-    const response = await fetch(`${API_BASE}/api/templates`, {
+    const response = await fetch(`${API_BASE_SERVER}/api/templates`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(2500),
     });
@@ -62,10 +58,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { templateId } = await params;
   const template = await findTemplate(templateId);
-  const name = template?.name ?? 'Template tidak ditemukan';
+  const name = template?.name ?? 'Contoh poster tidak ditemukan';
   return {
-    title: `${name} — Customizer`,
-    description: `Isi brief bisnis untuk template ${name}: nama brand, tagline, deskripsi, warna aksen, teks tombol, dan nada penulisan. AI menyusun draft, developer mengeksekusi sampai live.`,
+    title: `${name} — Customizer Poster`,
+    description: `Isi brief merek untuk ${name}: nama brand, tagline, deskripsi, warna aksen, teks tombol, dan nada penulisan. AI menyusun draft poster yang divalidasi editor sebelum dikirim.`,
     alternates: { canonical: `/customizer/${templateId}` },
   };
 }
@@ -76,6 +72,8 @@ export default async function CustomizerPage({ params }: { params: Promise<{ tem
   // sedangkan nama template dari server tersedia untuk metadata di atas.
   // fetchCatalog() di dalam findTemplate() tidak pernah melempar.
   await findTemplate(templateId).catch(() => null);
+  // Shell halaman: header + footer + klien customizer (form brief kiri,
+  // live preview poster kanan).
   return (
     <>
       <Header />

@@ -32,59 +32,60 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "CraftAI Studio | Kustomisasi Template Website dengan AI",
-    template: "%s | CraftAI Studio",
+    default: "Aether Creative | Platform Pembuatan Poster untuk UMKM",
+    template: "%s | Aether Creative",
   },
   description:
-    "Layanan kustomisasi template website berbantuan AI: pilih template, isi brief, AI menyusun draft konten, developer mengeksekusi sampai live beserta source code.",
-  applicationName: "CraftAI Studio",
+    "Platform pembuatan poster untuk membantu UMKM lebih tepercaya: kirim brief merek, editor memvalidasi draft, lalu terima poster siap pakai. Cepat, terjangkau, dan sesuai karakter usaha.",
+  applicationName: "Aether Creative",
   keywords: [
-    "kustomisasi template website",
-    "AI website builder",
-    "jasa pembuatan website UMKM",
-    "template cafe",
-    "template portofolio",
-    "toko online",
+    "pembuatan poster UMKM",
+    "jasa desain poster",
+    "poster promosi kuliner",
+    "poster toko online",
+    "poster kreator",
+    "poster AI",
+    "poster siap pakai",
   ],
-  authors: [{ name: "CraftAI Studio" }],
-  creator: "CraftAI Studio",
+  authors: [{ name: "Aether Creative" }],
+  creator: "Aether Creative",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "id_ID",
     url: "/",
-    siteName: "CraftAI Studio",
-    title: "CraftAI Studio | Kustomisasi Template Website dengan AI",
+    siteName: "Aether Creative",
+    title: "Aether Creative | Platform Pembuatan Poster untuk UMKM",
     description:
-      "Pilih template, isi brief bisnis, AI menyusun draft kontennya, developer mengeksekusi sampai halaman bisa dibuka publik.",
+      "Cepat, terjangkau, sesuai karakter usaha, dan lebih tepercaya. Brief merek menjadi draft yang divalidasi editor, lalu poster siap pakai.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "CraftAI Studio | Kustomisasi Template Website dengan AI",
+    title: "Aether Creative | Platform Pembuatan Poster untuk UMKM",
     description:
-      "Pilih template, isi brief bisnis, AI menyusun draft kontennya, developer mengeksekusi sampai halaman bisa dibuka publik.",
+      "Platform pembuatan poster untuk UMKM: brief merek, editor validasi, hasil siap pakai.",
   },
   robots: {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true, "max-image-preview": "large" },
   },
-  category: "technology",
+  category: "business",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F5F0E6" },
-    { media: "(prefers-color-scheme: dark)", color: "#141210" },
+    { media: "(prefers-color-scheme: light)", color: "#F6F5FB" },
+    { media: "(prefers-color-scheme: dark)", color: "#121220" },
   ],
 };
 
 // Tema dipasang sebelum paint supaya halaman gelap tidak berkedip putih dulu.
 // Class `js` menandai bahwa animasi reveal boleh menyembunyikan elemen; tanpa
 // JavaScript, semua konten harus tetap terlihat.
-const THEME_SCRIPT = `(function(){try{document.documentElement.classList.add('js');var t=localStorage.getItem('craftai-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
+const THEME_SCRIPT = `(function(){try{document.documentElement.classList.add('js');var t=localStorage.getItem('aether-theme')||localStorage.getItem('craftai-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

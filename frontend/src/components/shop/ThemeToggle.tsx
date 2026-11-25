@@ -40,7 +40,9 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
     const next: Theme = readTheme() === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute(ROOT_ATTR, next);
     try {
-      localStorage.setItem('craftai-theme', next);
+      // Key baru 'aether-theme'; key lama 'craftai-theme' masih dibaca oleh
+      // script pre-paint di layout.tsx sebagai fallback preferensi lama.
+      localStorage.setItem('aether-theme', next);
     } catch {
       // Penyimpanan diblokir (mode privat): tema tetap berganti untuk sesi ini.
     }

@@ -51,7 +51,7 @@ function buildCells(stats: AdminStats): Cell[] {
       key: 'revenue',
       label: 'Pendapatan lunas',
       value: formatRupiahShort(stats.revenue),
-      note: 'hanya order berstatus paid',
+      note: 'order Satuan & Paket Hemat yang lunas',
     },
     {
       key: 'delivered',

@@ -2,12 +2,13 @@ import Link from 'next/link';
 import { ThemeToggle } from './ThemeToggle';
 
 // Navigasi hanya berisi tujuan yang benar-benar ada: /#cara-kerja, /#katalog,
-// /#paket, dan /orders. Tanpa backdrop-blur: header kertas pekat dengan garis
-// bawah 1px, konsisten dengan bahasa cetak (DESIGN.md).
+// /#paket, dan /orders. Header terang dengan garis bawah 1px; monogram violet
+// adalah satu-satunya warna aksen agar identitas Aether Creative terbaca tanpa
+// menjadi norak.
 const NAV = [
   { href: '/#cara-kerja', label: 'Cara kerja' },
-  { href: '/#katalog', label: 'Template' },
-  { href: '/#paket', label: 'Paket' },
+  { href: '/#katalog', label: 'Poster' },
+  { href: '/#paket', label: 'Harga' },
   { href: '/orders', label: 'Lacak pesanan' },
 ];
 
@@ -17,15 +18,15 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-6xl items-stretch justify-between gap-4 px-4 sm:px-6">
         <Link href="/" className="flex min-w-0 items-center gap-3">
           <span
-            className="grid size-9 shrink-0 place-items-center border border-ink bg-ink font-mono text-[13px] font-bold text-paper"
+            className="grid size-9 shrink-0 place-items-center border border-ink bg-accent font-mono text-[13px] font-bold text-accent-ink"
             aria-hidden="true"
           >
-            CS
+            AC
           </span>
           <span className="flex min-w-0 flex-col leading-none">
-            <span className="truncate text-[15px] font-semibold tracking-tight">CraftAI Studio</span>
+            <span className="truncate text-[15px] font-semibold tracking-tight">Aether Creative</span>
             <span className="mt-1 hidden font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft sm:block">
-              Riset &amp; cetak web UMKM
+              Poster siap pakai untuk UMKM
             </span>
           </span>
         </Link>
@@ -49,7 +50,7 @@ export function Header() {
             href="/#katalog"
             className="hidden h-11 items-center border border-ink bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-transform hover:-translate-y-px hover:shadow-[2px_2px_0_0_var(--ink)] sm:inline-flex"
           >
-            Mulai dari katalog
+            Buat poster
           </Link>
         </div>
       </div>

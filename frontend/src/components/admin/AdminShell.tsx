@@ -9,7 +9,7 @@ import { ThemeToggle } from '@/components/shop/ThemeToggle';
 // storefront customer (/). Halaman daftar order belum ada, jadi tidak diiklankan.
 const NAV_ITEMS = [
   { href: '/admin', label: 'Papan' },
-  { href: '/', label: 'Lihat situs' },
+  { href: '/', label: 'Situs customer' },
 ];
 
 // Kerangka back-office: bilah identitas tipis + area kerja. Bahasa visualnya sama
@@ -23,17 +23,17 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           <Link
             href="/admin"
             className="group -my-1.5 flex min-h-11 min-w-0 items-center gap-2.5 py-1.5"
-            aria-label="CraftAI Studio: kembali ke papan pesanan"
+            aria-label="Aether Creative: kembali ke papan pesanan"
           >
             <span
               aria-hidden="true"
               className="grid size-8 shrink-0 place-items-center bg-ink font-mono text-[13px] font-bold text-paper"
             >
-              C
+              A
             </span>
             <span className="min-w-0">
               <span className="block truncate text-sm leading-tight font-semibold tracking-tight">
-                CraftAI Studio
+                Aether Creative
               </span>
               <span className="block font-mono text-[10px] leading-tight tracking-wide text-ink-soft uppercase">
                 Back office
@@ -68,7 +68,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
       <footer className="border-t border-rule">
         <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-2 px-4 py-3 font-mono text-[10px] tracking-wide text-ink-soft uppercase sm:px-6">
-          <span>CraftAI Studio: meja kerja produksi</span>
+          <span>Aether Creative · meja kerja produksi poster</span>
           <span>Internal · data demo</span>
         </div>
       </footer>

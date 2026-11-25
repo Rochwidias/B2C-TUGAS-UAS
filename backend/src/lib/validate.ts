@@ -1,6 +1,9 @@
 // Validasi skema draft ala JSON-Schema tanpa dependency tambahan.
 // Dipakai untuk output Gemini DAN generator lokal — keduanya wajib lolos
 // sebelum disimpan, supaya UI bisa mengandalkan bentuk data.
+// Skema poster: docs/REDESIGN.md §4 (brand/theme/poster + points tepat 3).
+
+import type { Draft, DraftPoint, DraftPoster } from '../types';
 
 export interface SchemaIssue {
   path: string;
@@ -16,11 +19,23 @@ const HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 // saat render preview maupun saat diekspor ke HTML.
 const MAX_TEXT = 400;
 
+export { MAX_TEXT };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function requireString(source: Record<string, unknown>, key: string, path: string, fail: IssueSink): string {
+/**
+ * Baca string wajib: laporkan bila hilang/kosong, DAN potong ke `MAX_TEXT`.
+ * Nilai potongan inilah yang dipakai saat menyimpan draft (audit §12 A3) —
+ * hasil `requireString` tidak boleh dibuang di call site.
+ */
+function readString(
+  source: Record<string, unknown>,
+  key: string,
+  path: string,
+  fail: IssueSink,
+): string {
   const value = source[key];
   const child = `${path}.${key}`;
   if (typeof value !== 'string') {
@@ -40,7 +55,7 @@ function requireString(source: Record<string, unknown>, key: string, path: strin
   return trimmed;
 }
 
-function requireArray(
+function readArray(
   source: Record<string, unknown>,
   key: string,
   exactLength: number,
@@ -60,58 +75,87 @@ function requireArray(
   return value;
 }
 
+export interface NormalizedDraft {
+  issues: SchemaIssue[];
+  /** Draft hasil normalisasi; `null` bila ada pelanggaran struktural. */
+  draft: Draft | null;
+}
+
 /**
- * Mengembalikan daftar pelanggaran; array kosong = draft valid.
- * Sebagian item rusak tetap dilaporkan per jalur sehingga fallback bisa
- * meniru "partial output Gemini lalu isi ulang dengan generator lokal".
+ * Validasi + normalisasi: mengembalikan daftar pelanggaran DAN objek draft
+ * yang sudah dipotong `MAX_TEXT`. `issues` kosong = draft valid dan `draft`
+ * siap disimpan apa adanya.
  */
-export function validateDraftSchema(value: unknown): SchemaIssue[] {
+export function normalizeDraftSchema(value: unknown): NormalizedDraft {
   const issues: SchemaIssue[] = [];
   const fail: IssueSink = (path, message) => issues.push({ path, message });
 
-  if (!isRecord(value)) return [{ path: '$', message: 'draft harus berupa object JSON' }];
+  if (!isRecord(value)) return { issues: [{ path: '$', message: 'draft harus berupa object JSON' }], draft: null };
 
-  for (const section of ['brand', 'theme', 'heroSection'] as const) {
+  for (const section of ['brand', 'theme', 'poster'] as const) {
     if (!isRecord(value[section])) fail(`$.${section}`, 'harus berupa object');
   }
 
   const brand = isRecord(value.brand) ? value.brand : {};
-  requireString(brand, 'name', '$.brand', fail);
-  requireString(brand, 'tagline', '$.brand', fail);
-  requireString(brand, 'about', '$.brand', fail);
+  const brandName = readString(brand, 'name', '$.brand', fail);
+  const brandTagline = readString(brand, 'tagline', '$.brand', fail);
+  const brandAbout = readString(brand, 'about', '$.brand', fail);
 
   const theme = isRecord(value.theme) ? value.theme : {};
-  const primaryColor = requireString(theme, 'primaryColor', '$.theme', fail);
+  const primaryColor = readString(theme, 'primaryColor', '$.theme', fail);
   if (primaryColor && !HEX_RE.test(primaryColor)) fail('$.theme.primaryColor', 'harus berupa hex (#RRGGBB)');
-  const accentColor = requireString(theme, 'accentColor', '$.theme', fail);
+  const accentColor = readString(theme, 'accentColor', '$.theme', fail);
   if (accentColor && !HEX_RE.test(accentColor)) fail('$.theme.accentColor', 'harus berupa hex (#RRGGBB)');
-  requireString(theme, 'fontPairing', '$.theme', fail);
+  const fontPairing = readString(theme, 'fontPairing', '$.theme', fail);
 
-  const hero = isRecord(value.heroSection) ? value.heroSection : {};
-  requireString(hero, 'badge', '$.heroSection', fail);
-  requireString(hero, 'headline', '$.heroSection', fail);
-  requireString(hero, 'subheadline', '$.heroSection', fail);
-  requireString(hero, 'ctaText', '$.heroSection', fail);
+  const posterSource = isRecord(value.poster) ? value.poster : {};
+  const poster: DraftPoster = {
+    badge: readString(posterSource, 'badge', '$.poster', fail),
+    headline: readString(posterSource, 'headline', '$.poster', fail),
+    subheadline: readString(posterSource, 'subheadline', '$.poster', fail),
+    ctaText: readString(posterSource, 'ctaText', '$.poster', fail),
+  };
 
-  // Panjang maksimum item dibatasi supaya draft tidak membengkak tanpa alasan.
-  requireArray(value, 'features', 3, '$', fail)
+  // points menggantikan `features` dan wajib tepat 3 (§4).
+  const points: DraftPoint[] = [];
+  readArray(value, 'points', 3, '$', fail)
     .slice(0, 3)
     .forEach((item, index) => {
-      const path = `$.features[${index}]`;
-      if (!isRecord(item)) return fail(path, 'harus berupa object');
-      requireString(item, 'icon', path, fail);
-      requireString(item, 'title', path, fail);
-      requireString(item, 'description', path, fail);
+      const path = `$.points[${index}]`;
+      if (!isRecord(item)) {
+        fail(path, 'harus berupa object');
+        points.push({ icon: '', title: '', description: '' });
+        return;
+      }
+      points.push({
+        icon: readString(item, 'icon', path, fail),
+        title: readString(item, 'title', path, fail),
+        description: readString(item, 'description', path, fail),
+      });
     });
 
-  requireArray(value, 'faq', 2, '$', fail)
-    .slice(0, 2)
-    .forEach((item, index) => {
-      const path = `$.faq[${index}]`;
-      if (!isRecord(item)) return fail(path, 'harus berupa object');
-      requireString(item, 'q', path, fail);
-      requireString(item, 'a', path, fail);
-    });
+  // `faq` / `heroSection` tidak lagi bagian skema; keduanya menggambarkan
+  // skema website lama sehingga dianggap salah bentuk bila masih muncul.
+  if ('faq' in value) fail('$.faq', 'tidak ada dalam skema poster (dihapus)');
+  if ('heroSection' in value) fail('$.heroSection', 'digantikan $.poster');
 
-  return issues;
+  if (issues.length > 0) return { issues, draft: null };
+
+  return {
+    issues,
+    draft: {
+      brand: { name: brandName, tagline: brandTagline, about: brandAbout },
+      theme: { primaryColor, accentColor, fontPairing },
+      poster,
+      points,
+    },
+  };
+}
+
+/**
+ * Hanya pelanggaran (dipakai untuk logging). Bila butuh objek draft ternormalisasi,
+ * pakai `normalizeDraftSchema`.
+ */
+export function validateDraftSchema(value: unknown): SchemaIssue[] {
+  return normalizeDraftSchema(value).issues;
 }

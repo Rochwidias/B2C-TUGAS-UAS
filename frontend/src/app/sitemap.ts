@@ -1,11 +1,8 @@
 import type { MetadataRoute } from 'next';
+import { API_BASE_SERVER } from '@/lib/api';
 import { FALLBACK_TEMPLATES, fetchCatalog } from '@/lib/catalog';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
-
-// Base URL backend (lihat src/lib/api.ts): SSR fetch harus absolut, jadi
-// NEXT_PUBLIC_API_URL lalu BACKEND_ORIGIN (server-side di Vercel), default lokal.
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_ORIGIN ?? 'http://localhost:4000';
 
 // Route statis didahulukan, lalu tiap template dapat halaman customizer-nya.
 // Prioritas 0.9 untuk halaman utama karena itu pintu masuk utama layanan.
@@ -28,7 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   FALLBACK_TEMPLATES.forEach((template) => addId(template.id));
 
   try {
-    const response = await fetch(`${API_BASE}/api/templates`, {
+    const response = await fetch(`${API_BASE_SERVER}/api/templates`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(2500),
     });

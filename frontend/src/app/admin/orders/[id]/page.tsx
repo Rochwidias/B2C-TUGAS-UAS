@@ -17,7 +17,7 @@ export async function generateMetadata({
   return {
     title: `Detail Order ${shortId}`,
     description:
-      'Berkas order back office CraftAI Studio: brief customer, payload draft AI, form update status, dan penyerahan hasil produksi.',
+      'Berkas order back office Aether Creative: brief poster, payload draft AI, daftar semua draft, form update status, dan penyerahan hasil produksi.',
     robots: { index: false, follow: false },
   };
 }

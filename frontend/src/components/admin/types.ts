@@ -19,6 +19,13 @@ export interface AdminOrder {
   contact_whatsapp: string;
   contact_email: string;
   package_name: string;
+  /** 'satuan' | 'hemat' (docs/REDESIGN.md §2). Opsional: order lama belum punya. */
+  package_key?: string | null;
+  /** Kuota poster per order: 1 untuk Satuan, 3 untuk Paket Hemat. */
+  quota?: number | null;
+  /** Beberapa build backend menyertakan sisa kuota langsung di baris order. */
+  remaining?: number | null;
+  draft_count?: number | null;
   live_website_url: string | null;
   download_zip_url: string | null;
   dev_note: string | null;
@@ -40,17 +47,27 @@ export interface DraftBrief {
   brandName: string;
   tagline: string;
   description: string;
-  themeColor: 'amber' | 'indigo' | 'emerald' | 'rose';
+  /** Enum tema baru (docs/REDESIGN.md §4): indigo digantikan violet. */
+  themeColor: 'violet' | 'navy' | 'amber' | 'emerald';
   ctaText: string;
   toneOfVoice: string;
 }
 
+export interface DraftPoint {
+  icon: string;
+  title: string;
+  description: string;
+}
+
+/** Skema draft poster (docs/REDESIGN.md §4): `poster` + tepat 3 `points`. */
 export interface Draft {
   brand: { name: string; tagline: string; about: string };
   theme: { primaryColor: string; accentColor: string; fontPairing: string };
-  heroSection: { badge: string; headline: string; subheadline: string; ctaText: string };
-  features: { icon: string; title: string; description: string }[];
-  faq: { q: string; a: string }[];
+  poster?: { badge: string; headline: string; subheadline: string; ctaText: string };
+  points?: DraftPoint[];
+  /** Bentuk lama (website) yang masih mungkin dikirim backend lama saat transisi. */
+  heroSection?: { badge: string; headline: string; subheadline: string; ctaText: string };
+  features?: DraftPoint[];
 }
 
 export interface AdminDraft {
@@ -126,10 +143,57 @@ export const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'completed', label: 'Completed' },
 ];
 
-/** Kolom papan tempat sebuah status order berada (draft/paid -> backlog). */
-export function columnOfStatus(status: OrderStatus): ColumnKey {
-  if (status === 'draft' || status === 'paid') return 'backlog';
-  return status;
+/**
+ * Kolom papan tempat sebuah status order berada (draft/paid -> backlog).
+ * Menerima string apa pun: status tak dikenal dari API harus jatuh ke Backlog,
+ * bukan membuat `COLUMN_META[column]` crash di layar (docs/REDESIGN.md §12).
+ */
+export function columnOfStatus(status: OrderStatus | string | null | undefined): ColumnKey {
+  if (status === 'in_progress' || status === 'review' || status === 'completed') return status;
+  return 'backlog';
+}
+
+/** Baca bilangan bulat positif dari field API yang bisa saja hilang/nyasar. */
+export function positiveInt(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+export interface QuotaInfo {
+  /** Kuota poster pada paket (1 atau 3). */
+  quota: number | null;
+  /** Poster yang sudah dibuat. */
+  used: number | null;
+  /** Poster yang masih boleh diminta. */
+  remaining: number | null;
+}
+
+/**
+ * Sisa kuota order. `remaining` dari API menang bila ada; kalau tidak, dihitung
+ * dari kuota dikurangi jumlah draft yang diketahui. Semuanya bisa null — UI
+ * menampilkan "—" alih-alih mengarang angka.
+ */
+export function quotaOf(order: Partial<AdminOrder>, knownDrafts?: number | null): QuotaInfo {
+  const quota = positiveInt(order.quota);
+  const used = positiveInt(order.draft_count) ?? positiveInt(knownDrafts);
+  const apiRemaining = positiveInt(order.remaining);
+  const remaining =
+    apiRemaining ?? (quota !== null && used !== null ? Math.max(quota - used, 0) : null);
+  return { quota, used, remaining };
+}
+
+/** Ringkasan kuota untuk kartu kanban: "sisa 2 dari 3", "kuota 3", atau "—". */
+export function quotaSummary(info: QuotaInfo): { text: string; tone: string } {
+  if (info.remaining !== null && info.quota !== null) {
+    return {
+      text: `sisa ${info.remaining}/${info.quota}`,
+      tone: info.remaining > 0 ? 'text-ok' : 'text-danger',
+    };
+  }
+  if (info.remaining !== null) {
+    return { text: `sisa ${info.remaining}`, tone: info.remaining > 0 ? 'text-ok' : 'text-danger' };
+  }
+  if (info.quota !== null) return { text: `kuota ${info.quota}`, tone: 'text-ink-soft' };
+  return { text: '—', tone: 'text-ink-soft' };
 }
 
 /** Angka aman: respons API yang cacat tidak boleh menjelma "NaN" di layar. */

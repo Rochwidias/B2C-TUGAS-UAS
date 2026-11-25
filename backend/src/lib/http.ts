@@ -17,7 +17,8 @@ export function sendError(res: ExpressResponse, message: string, status: number)
 /** Kirim payload JSON dengan status (default 200). */
 export function sendOk(
   res: ExpressResponse,
-  payload: Record<string, unknown>,
+  // `object` (bukan Record) supaya spread interface — mis. orderDetail — tetap diterima.
+  payload: object,
   status = 200,
 ): void {
   res.status(status).json(payload);

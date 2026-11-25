@@ -1,54 +1,98 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyBlock } from '@/components/ui/EmptyBlock';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Reveal } from './Reveal';
 import { TemplateCard } from './TemplateCard';
-import { type Template, categoryLabel } from './types';
-import { FALLBACK_TEMPLATES, fetchCatalog } from '@/lib/catalog';
+import { type PackageOption, type Template, categoryLabel, formatRupiah } from './types';
+import { FALLBACK_TEMPLATES, fetchCatalogResult } from '@/lib/catalog';
+import { fetchPackages } from '@/lib/packages';
 
-// Katalog = rak cetak: judul ledger, filter bergaris, grid kartu.
+// Urutan filter mengikuti segmen yang dilayani (docs/REDESIGN.md §6): label
+// persis "Semua | Kuliner | Kreator | Toko Online". Kategori lain yang datang
+// dari server tetap tampil setelah ketiganya.
+const FILTER_ORDER = ['Kuliner', 'Kreator', 'Toko Online'];
+
+// Katalog = rak contoh poster: judul ledger, filter bergaris, grid kartu.
 // id="katalog" dan data-testid="template-grid" dipakai navigasi + tes E2E.
 //
-// Kartu dirender dari FALLBACK_TEMPLATES sejak render pertama (SSR ikut
-// membawa daftarnya) supaya katalog langsung terisi walau backend lambat atau
-// tidak terjangkau; fetchCatalog tetap berjalan di latar belakang untuk data
-// terbaru dari server.
+// Daftar bawaan dipakai sebagai isi awal supaya SSR tidak kosong; begitu
+// fetch selesai, state menjadi "ready" atau "error" — kegagalan server TIDAK
+// ditelan diam-diam (docs/REDESIGN.md §12), melainkan ditampilkan lengkap
+// dengan tombol coba lagi.
 export function TemplateCatalog() {
   const [templates, setTemplates] = useState<Template[]>(FALLBACK_TEMPLATES);
-  const [loading, setLoading] = useState(true);
+  const [packages, setPackages] = useState<PackageOption[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState('semua');
 
+  // Ref penanda komponen masih terpasang: hasil fetch telat tidak boleh
+  // menulis state setelah unmount (navigasi kilat antar halaman).
+  const aliveRef = useRef(true);
+
+  // Satu jalur pemuatan untuk render awal maupun tombol "coba lagi", supaya
+  // perilaku state error identik di keduanya.
+  const load = useCallback(async () => {
+    setStatus('loading');
+    const [catalog, pkgResult] = await Promise.all([fetchCatalogResult(), fetchPackages()]);
+    if (!aliveRef.current) return;
+    setTemplates(catalog.templates);
+    if (pkgResult.ok) setPackages(pkgResult.packages);
+    if (catalog.ok) {
+      setStatus('ready');
+      setError(null);
+    } else {
+      setStatus('error');
+      setError(catalog.error ?? 'Katalog tidak bisa dimuat dari server.');
+    }
+  }, []);
+
+  // Pemuatan awal memakai rantai promise supaya tidak ada setState sinkron di
+  // dalam effect (react-hooks/set-state-in-effect); `load` tetap dipakai tombol
+  // "coba lagi" dari event handler.
   useEffect(() => {
-    let alive = true;
-    fetchCatalog().then((next) => {
-      if (!alive) return;
-      setTemplates(next);
-      setLoading(false);
+    aliveRef.current = true;
+    Promise.all([fetchCatalogResult(), fetchPackages()]).then(([catalog, pkgResult]) => {
+      if (!aliveRef.current) return;
+      setTemplates(catalog.templates);
+      if (pkgResult.ok) setPackages(pkgResult.packages);
+      if (catalog.ok) {
+        setStatus('ready');
+        setError(null);
+      } else {
+        setStatus('error');
+        setError(catalog.error ?? 'Katalog tidak bisa dimuat dari server.');
+      }
     });
     return () => {
-      alive = false;
+      aliveRef.current = false;
     };
   }, []);
+
 
   const categories = useMemo(() => {
     const seen: string[] = [];
     templates.forEach((t) => {
-      if (!seen.includes(t.category)) seen.push(t.category);
+      const label = categoryLabel(t.category);
+      if (!seen.includes(label)) seen.push(label);
     });
-    return seen;
+    const ordered = FILTER_ORDER.filter((label) => seen.includes(label));
+    return [...ordered, ...seen.filter((label) => !FILTER_ORDER.includes(label))];
   }, [templates]);
 
   const visible = useMemo(() => {
     if (active === 'semua') return templates;
-    return templates.filter((t) => t.category === active);
+    return templates.filter((t) => categoryLabel(t.category) === active);
   }, [templates, active]);
 
-  const filters = [
-    { key: 'semua', label: 'Semua' },
-    ...categories.map((c) => ({ key: c, label: categoryLabel(c) })),
-  ];
+  const filters = [{ key: 'semua', label: 'Semua' }, ...categories.map((label) => ({ key: label, label }))];
+
+  const packageFor = (template: Template): PackageOption | null =>
+    template.recommendedPackage
+      ? (packages.find((pkg) => pkg.key === template.recommendedPackage) ?? null)
+      : null;
 
   return (
     <Reveal
@@ -60,22 +104,22 @@ export function TemplateCatalog() {
         <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-soft">
-              Rak 02 / Katalog
+              Rak 02 / Contoh poster
             </p>
             <h2 className="mt-3 text-[32px] font-semibold leading-[1.05] tracking-tight sm:text-[44px]">
-              Tiga template siap cetak
+              Contoh poster per segmen usaha
             </h2>
             <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
-              Setiap template punya struktur halaman dan palet dasar. Yang berubah setelah brief
-              Anda masuk: nama brand, warna aksen, headline, daftar fitur, dan tanya jawab.
+              Pilih segmen yang paling dekat dengan usaha Anda. Yang berubah setelah brief masuk:
+              nama brand, warna aksen, headline, tombol ajakan, dan tiga poin penawaran.
             </p>
           </div>
 
           <div className="flex flex-col gap-2 lg:items-end">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-              Saring per kategori
+              Saring per segmen
             </p>
-            <div role="group" aria-label="Filter kategori template" className="flex flex-wrap gap-2">
+            <div role="group" aria-label="Filter segmen poster" className="flex flex-wrap gap-2">
               {filters.map((f) => {
                 const isActive = active === f.key;
                 return (
@@ -101,25 +145,51 @@ export function TemplateCatalog() {
         </div>
 
         <div className="mt-10 border-t border-rule pt-6">
-          {loading && (
+          {/* State error jujur: isi katalog tetap terbaca, tetapi kegagalan
+              server disebut apa adanya dan bisa dicoba ulang. */}
+          {status === 'error' && (
+            <div
+              role="alert"
+              className="mb-6 flex flex-col gap-3 border border-danger bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">
+                  Katalog belum terhubung ke server
+                </p>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
+                  {error} Kartu di bawah memakai contoh bawaan, jadi harga dan rekomendasi paket
+                  mungkin belum yang terbaru.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 border border-ink bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-ink hover:text-paper"
+              >
+                Coba lagi
+              </button>
+            </div>
+          )}
+
+          {status === 'loading' && (
             <p
               aria-live="polite"
               aria-busy="true"
               className="mb-4 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft"
             >
-              Memuat katalog template
+              Memuat contoh poster
             </p>
           )}
 
           {templates.length === 0 && (
             <EmptyState
               icon="0"
-              title="Belum ada template aktif"
+              title="Belum ada contoh poster aktif"
               description="Tabel template masih kosong atau seluruh baris berstatus nonaktif. Muat ulang setelah data diisi lewat panel admin."
             >
               <button
                 type="button"
-                onClick={() => window.location.reload()}
+                onClick={() => void load()}
                 className="mt-4 min-h-11 border border-ink bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-transform hover:-translate-y-px hover:shadow-[2px_2px_0_0_var(--ink)]"
               >
                 Muat ulang
@@ -130,8 +200,8 @@ export function TemplateCatalog() {
           {templates.length > 0 && visible.length === 0 && (
             <div aria-live="polite">
               <EmptyBlock
-                title={`Kategori ${categoryLabel(active)} belum terisi`}
-                description={`Tampilkan semua kategori untuk melihat ${templates.length} template yang tersedia.`}
+                title={`Segmen ${active} belum terisi`}
+                description={`Tampilkan semua segmen untuk melihat ${templates.length} contoh poster yang tersedia.`}
                 actionLabel="Tampilkan semua"
                 onAction={() => setActive('semua')}
               />
@@ -144,7 +214,7 @@ export function TemplateCatalog() {
               data-testid="template-grid"
             >
               {visible.map((t) => (
-                <TemplateCard key={t.id} template={t} />
+                <TemplateCard key={t.id} template={t} recommended={packageFor(t)} />
               ))}
             </div>
           )}
@@ -153,8 +223,14 @@ export function TemplateCatalog() {
         <p className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-[11px] text-ink-soft">
           <span className="border border-rule px-1.5 py-0.5 uppercase tracking-wide">Catatan</span>
           <span>
-            Harga di kartu adalah harga template. Biaya eksekusi ditentukan pada langkah paket.
+            Harga pada kartu adalah harga satuan per poster. Paket hemat, estimasi waktu, dan
+            garansi ditampilkan pada bagian harga di bawah, diambil dari server.
           </span>
+          {packages.length > 0 && (
+            <span className="text-ok">
+              Paket terbaru: {packages.map((p) => `${p.name} ${formatRupiah(p.price)}`).join(' / ')}
+            </span>
+          )}
         </p>
       </div>
     </Reveal>

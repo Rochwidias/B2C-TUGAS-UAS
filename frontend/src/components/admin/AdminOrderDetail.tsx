@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import AdminShell from '@/components/admin/AdminShell';
 import JsonBlock from '@/components/admin/JsonBlock';
+import PosterPreview from '@/components/admin/PosterPreview';
 import StatusBadge from '@/components/admin/StatusBadge';
 import StatusUpdateForm from '@/components/admin/StatusUpdateForm';
 import DeliveryForm from '@/components/admin/DeliveryForm';
@@ -20,15 +21,67 @@ import {
   columnOfStatus,
   formatDate,
   formatRupiah,
+  positiveInt,
+  quotaOf,
   type AdminDraft,
   type AdminOrder,
+  type DraftBrief,
   type OrderLog,
+  type QuotaInfo,
 } from '@/components/admin/types';
 
+// GET /api/orders/[id] -> {order, draft, drafts, logs, remaining}
+// (docs/REDESIGN.md §5). `drafts`/`remaining` opsional supaya halaman tetap
+// terbaca saat backend lama yang belum mengirimnya sedang berjalan.
 interface OrderPayload {
   order: AdminOrder;
   draft: AdminDraft | null;
+  drafts?: AdminDraft[];
   logs: OrderLog[];
+  remaining?: number | null;
+}
+
+/** Label untuk baris brief; nilai kosong tetap terlihat sebagai '-'. */
+const BRIEF_ROWS = [
+  { key: 'brandName', label: 'Brand', mono: false },
+  { key: 'tagline', label: 'Tagline', mono: false },
+  { key: 'description', label: 'Deskripsi', mono: false },
+  { key: 'themeColor', label: 'Warna tema', mono: true },
+  { key: 'ctaText', label: 'CTA', mono: false },
+  { key: 'toneOfVoice', label: 'Tone of voice', mono: false },
+  { key: 'templateId', label: 'Template', mono: true },
+] as const;
+
+function BriefLedger({ brief }: { brief: DraftBrief | null }) {
+  if (!brief) {
+    return (
+      <p className="px-3 py-4 text-[11.5px] leading-relaxed text-ink-soft">
+        Brief tidak tersimpan untuk order ini. Minta customer mengisi ulang brief di halaman
+        kustomisasi.
+      </p>
+    );
+  }
+  return (
+    <dl className="divide-y divide-rule text-[12px]">
+      {BRIEF_ROWS.map((row) => {
+        const value = brief[row.key] ?? '';
+        return (
+          <div key={row.key} className="flex gap-3 px-3 py-2">
+            <dt className="w-[92px] shrink-0 font-mono text-[9.5px] leading-[1.7] tracking-wide text-ink-soft uppercase">
+              {row.label}
+            </dt>
+            <dd
+              className={`min-w-0 flex-1 leading-relaxed break-words ${row.mono ? 'font-mono text-[11.5px]' : ''} ${
+                value ? 'text-ink' : 'text-ink-soft'
+              }`}
+            >
+              {value || '-'}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
 }
 
 function DetailSkeleton() {
@@ -56,6 +109,9 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
   const [data, setData] = useState<OrderPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
+  // Draft yang sedang ditampilkan di pratinjau & JSON. Bila id tidak ditemukan
+  // lagi (mis. setelah muat ulang), otomatis jatuh ke draft utama — tanpa effect.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   // loading hanya untuk muat pertama. Memuat ulang setelah simpan membiarkan
   // halaman tetap terlihat, karena menggantinya dengan skeleton akan melepas
   // mount form dan menghapus pesan hasil simpan.
@@ -86,7 +142,9 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
           nextData = {
             order: payload.order,
             draft: payload.draft ?? null,
+            drafts: Array.isArray(payload.drafts) ? payload.drafts : undefined,
             logs: payload.logs ?? [],
+            remaining: payload.remaining ?? null,
           };
         }
       }
@@ -182,8 +240,16 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
   }
 
   const { order, draft, logs } = data;
-  const brief = draft?.input_prompt_data ?? null;
-  const content = draft?.ai_generated_content ?? null;
+  // Semua draft milik order (termasuk brief tambahan). `drafts` dari API menang;
+  // bila belum dikirim, jatuh ke draft tunggal agar halaman tetap lengkap.
+  const drafts = data.drafts && data.drafts.length > 0 ? data.drafts : draft ? [draft] : [];
+  const primary = draft ?? drafts[0] ?? null;
+  const selected = drafts.find((item) => item.id === selectedId) ?? primary;
+  const brief = primary?.input_prompt_data ?? null;
+  const content = selected?.ai_generated_content ?? null;
+
+  const quotaBase = quotaOf(order, drafts.length);
+  const quotaInfo: QuotaInfo = { ...quotaBase, remaining: positiveInt(data.remaining) ?? quotaBase.remaining };
   const column = columnOfStatus(order.status);
 
   return (
@@ -242,7 +308,7 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
             </p>
           </div>
 
-          <dl className="grid min-w-0 grid-cols-2 gap-x-5 gap-y-2 text-[11px] sm:grid-cols-4 lg:max-w-[52%]">
+          <dl className="grid min-w-0 grid-cols-2 gap-x-5 gap-y-2 text-[11px] sm:grid-cols-3 lg:max-w-[58%] lg:grid-cols-5">
             <div className="min-w-0">
               <dt className="font-mono text-[9.5px] tracking-wide text-ink-soft uppercase">
                 Customer
@@ -275,6 +341,29 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
                 >
                   {order.contact_email}
                 </a>
+              </dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="font-mono text-[9.5px] tracking-wide text-ink-soft uppercase">
+                Sisa kuota
+              </dt>
+              <dd
+                className={`mt-0.5 font-semibold ${
+                  quotaInfo.remaining === null
+                    ? 'text-ink-soft'
+                    : quotaInfo.remaining > 0
+                      ? 'text-ok'
+                      : 'text-danger'
+                }`}
+                title={
+                  quotaInfo.remaining === null
+                    ? 'Backend belum mengirim data kuota order ini.'
+                    : `Kuota paket ${quotaInfo.quota ?? '?'}, sudah dipakai ${drafts.length}`
+                }
+              >
+                {quotaInfo.remaining !== null
+                  ? `${quotaInfo.remaining}${quotaInfo.quota !== null ? ` / ${quotaInfo.quota}` : ''}`
+                  : '—'}
               </dd>
             </div>
             <div className="min-w-0">
@@ -332,40 +421,17 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
             </span>
           </div>
 
-          {brief ? (
-            <dl className="divide-y divide-rule text-[12px]">
-              {[
-                { label: 'Brand', value: brief.brandName, mono: false },
-                { label: 'Tagline', value: brief.tagline, mono: false },
-                { label: 'Deskripsi', value: brief.description, mono: false },
-                { label: 'Warna tema', value: brief.themeColor, mono: true },
-                { label: 'CTA', value: brief.ctaText, mono: false },
-                { label: 'Tone of voice', value: brief.toneOfVoice, mono: false },
-                { label: 'Template', value: brief.templateId, mono: true },
-              ].map((row) => (
-                <div key={row.label} className="flex gap-3 px-3 py-2">
-                  <dt className="w-[92px] shrink-0 font-mono text-[9.5px] leading-[1.7] tracking-wide text-ink-soft uppercase">
-                    {row.label}
-                  </dt>
-                  <dd
-                    className={`min-w-0 flex-1 leading-relaxed break-words ${
-                      row.mono ? 'font-mono text-[11.5px]' : ''
-                    } ${row.value ? 'text-ink' : 'text-ink-soft'}`}
-                  >
-                    {row.value || '-'}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <p className="px-3 py-4 text-[11.5px] leading-relaxed text-ink-soft">
-              Brief tidak tersimpan untuk order ini. Minta customer mengisi ulang brief di halaman
-              kustomisasi.
+          <BriefLedger brief={brief} />
+
+          {drafts.length > 1 ? (
+            <p className="border-t border-rule px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
+              Order ini punya {drafts.length} draft — {drafts.length - 1} di antaranya berasal dari
+              brief tambahan. Pilih draft di daftar untuk melihat brief lainnya.
             </p>
-          )}
+          ) : null}
         </section>
 
-        {/* Draft AI: pratinjau ringkas + tombol ekspor. */}
+        {/* Draft AI: pratinjau poster + tombol ekspor. */}
         <section
           aria-labelledby="draft-ai"
           className="flex min-w-0 flex-col border border-rule bg-surface"
@@ -375,15 +441,16 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
               id="draft-ai"
               className="flex items-baseline gap-2 text-xs font-semibold tracking-tight text-ink"
             >
-              Preview hasil draft
+              Pratinjau poster
               <span aria-hidden="true" className="font-mono text-[10px] font-normal text-ink-soft">
                 02
               </span>
             </h2>
-            {draft ? (
+            {selected ? (
               <a
-                href={`${API_BASE}/api/export/${draft.id}`}
+                href={`${API_BASE}/api/export/${selected.id}`}
                 download
+                aria-label={`Export Clean Source Code untuk draft ${selected.id.slice(0, 8)}`}
                 className="flex min-h-11 items-center border border-ink bg-ink px-3 text-[11.5px] font-semibold text-paper transition hover:border-accent hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 Export Clean Source Code
@@ -392,80 +459,8 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
           </div>
 
           {content ? (
-            <div className="flex flex-1 flex-col">
-              <div className="flex items-center gap-2.5 border-b border-rule px-3 py-2.5">
-                <span className="flex shrink-0 items-center gap-1" aria-hidden="true">
-                  <span
-                    className="block size-6 border border-rule"
-                    style={{ backgroundColor: content.theme.primaryColor }}
-                  />
-                  <span
-                    className="block size-6 border border-rule"
-                    style={{ backgroundColor: content.theme.accentColor }}
-                  />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-[12.5px] leading-tight font-semibold text-ink">
-                    {content.brand.name}
-                  </p>
-                  <p className="truncate font-mono text-[10.5px] text-ink-soft">
-                    {content.theme.fontPairing}
-                  </p>
-                </div>
-              </div>
-
-              <div className="border-b border-rule px-3 py-2.5">
-                <p className="font-mono text-[9.5px] tracking-wide text-ink-soft uppercase">Hero</p>
-                <p className="mt-1 text-[15px] leading-snug font-semibold text-ink">
-                  {content.heroSection.headline}
-                </p>
-                <p className="mt-1 text-[11.5px] leading-relaxed text-ink-soft">
-                  {content.heroSection.subheadline}
-                </p>
-                <span className="mt-2 inline-block border border-ink px-2 py-0.5 text-[10.5px] font-semibold text-ink">
-                  {content.heroSection.ctaText}
-                </span>
-              </div>
-
-              <div className="grid flex-1 gap-0 sm:grid-cols-2 sm:divide-x sm:divide-rule">
-                <div className="min-w-0 px-3 py-2.5">
-                  <p className="font-mono text-[9.5px] tracking-wide text-ink-soft uppercase">
-                    Fitur ({content.features.length})
-                  </p>
-                  <ul className="mt-1.5 space-y-1.5">
-                    {content.features.map((feature) => (
-                      <li key={feature.title} className="flex gap-1.5 text-[11px] leading-relaxed">
-                        {/* Ikon berasal dari data AI customer, ditampilkan sebagai teks isi,
-                            bukan ikon antarmuka. */}
-                        <span
-                          aria-hidden="true"
-                          className="shrink-0 font-mono text-[10px] text-ink-soft"
-                        >
-                          {feature.icon}
-                        </span>
-                        <span className="min-w-0 text-ink-soft">
-                          <span className="font-semibold text-ink">{feature.title}</span>{' '}
-                          {feature.description}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="min-w-0 border-t border-rule px-3 py-2.5 sm:border-t-0">
-                  <p className="font-mono text-[9.5px] tracking-wide text-ink-soft uppercase">
-                    FAQ ({content.faq.length})
-                  </p>
-                  <dl className="mt-1.5 space-y-1.5">
-                    {content.faq.map((item) => (
-                      <div key={item.q}>
-                        <dt className="text-[11px] leading-snug font-semibold text-ink">{item.q}</dt>
-                        <dd className="text-[11px] leading-relaxed text-ink-soft">{item.a}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              </div>
+            <div className="flex-1 p-3">
+              <PosterPreview content={content} />
             </div>
           ) : (
             <div className="px-3 py-4">
@@ -478,11 +473,98 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
         </section>
       </div>
 
+      {/* Semua draft milik order, termasuk brief tambahan dari kuota paket. */}
+      <section aria-labelledby="semua-draft" className="mt-3 border border-rule bg-surface">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule px-3 py-2">
+          <h2 id="semua-draft" className="flex items-baseline gap-2 text-xs font-semibold tracking-tight text-ink">
+            Semua draft &amp; brief
+            <span aria-hidden="true" className="font-mono text-[10px] font-normal text-ink-soft">
+              03
+            </span>
+          </h2>
+          <p className="font-mono text-[10px] tracking-[0.14em] text-ink-soft uppercase">
+            {drafts.length} draft · sisa kuota{' '}
+            {quotaInfo.remaining !== null ? quotaInfo.remaining : '—'}
+            {quotaInfo.quota !== null ? `/${quotaInfo.quota}` : ''}
+          </p>
+        </div>
+
+        {drafts.length === 0 ? (
+          <p className="px-3 py-4 text-[11.5px] leading-relaxed text-ink-soft">
+            Belum ada draft terhubung ke order ini. Brief tambahan dari customer akan langsung
+            muncul di daftar ini.
+          </p>
+        ) : (
+          <ul className="divide-y divide-rule">
+            {drafts.map((item, index) => {
+              const itemBrief = item.input_prompt_data;
+              const isActive = selected?.id === item.id;
+              return (
+                <li key={item.id} className={isActive ? 'bg-paper' : undefined}>
+                  <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(item.id)}
+                          aria-pressed={isActive}
+                          className="min-h-11 border border-rule bg-surface px-2.5 font-mono text-[11px] font-semibold text-ink transition hover:border-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        >
+                          Draft {String(index + 1).padStart(2, '0')}
+                        </button>
+                        <span
+                          className={`border-[1.5px] px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.1em] uppercase ${
+                            index === 0 ? 'border-rule text-ink-soft' : 'border-warn text-warn'
+                          }`}
+                        >
+                          {index === 0 ? 'Brief awal' : 'Brief tambahan'}
+                        </span>
+                        <time
+                          dateTime={item.generated_at}
+                          className="font-mono text-[10px] tabular-nums text-ink-soft"
+                        >
+                          {formatDate(item.generated_at)}
+                        </time>
+                      </div>
+                      <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft">
+                        <span className="font-semibold text-ink">
+                          {itemBrief?.brandName || 'Tanpa nama brand'}
+                        </span>
+                        {itemBrief?.tagline ? ` — ${itemBrief.tagline}` : ''}
+                      </p>
+                      <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10.5px] text-ink-soft">
+                        <span>tema {itemBrief?.themeColor ?? '—'}</span>
+                        <span>cta {itemBrief?.ctaText || '—'}</span>
+                        <span className="truncate">{item.id.slice(0, 8)}</span>
+                      </p>
+                    </div>
+
+                    <a
+                      href={`${API_BASE}/api/export/${item.id}`}
+                      download
+                      aria-label={`Export Clean Source Code untuk draft ${index + 1}`}
+                      className="flex min-h-11 shrink-0 items-center justify-center border border-rule px-3 text-[11.5px] font-medium text-ink transition hover:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:self-start"
+                    >
+                      Export ↓
+                    </a>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {/* Payload mentah selalu tersedia: admin butuh melihat persis apa yang
           dikembalikan API, termasuk saat draft AI belum digenerate. */}
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <JsonBlock value={content ?? { order, draft: null }} label={content ? 'Payload JSON draft AI' : 'Payload API order (draft belum ada)'} />
-        {brief ? <JsonBlock value={brief} label="Brief input (input_prompt_data)" /> : null}
+        <JsonBlock
+          value={content ?? { order, draft: null }}
+          label={content ? 'Payload JSON draft AI' : 'Payload API order (draft belum ada)'}
+        />
+        {selected?.input_prompt_data ? (
+          <JsonBlock value={selected.input_prompt_data} label="Brief input (input_prompt_data)" />
+        ) : null}
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">

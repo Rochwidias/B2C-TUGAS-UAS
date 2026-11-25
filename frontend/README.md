@@ -1,8 +1,9 @@
-# CraftAI Studio
+# Aether Creative (frontend)
 
-Layanan kustomisasi template website berbantuan AI. Customer memilih template,
-mengisi brief bisnis, server menyusun draft konten (JSON terstruktur), lalu
-developer mengeksekusi sampai halaman live beserta source code.
+Frontend **Aether Creative** — platform pembuatan poster untuk UMKM. Customer
+memilih contoh poster per segmen, mengisi brief, server menyusun draft konten
+(JSON terstruktur), lalu editor memvalidasi sampai hasil siap pakai beserta
+source code.
 
 Stack: **Next.js 16 App Router + React 19 + TypeScript + Tailwind v4**, database
 **`node:sqlite`** (tanpa dependency), AI lewat REST Gemini dengan fallback
@@ -23,12 +24,16 @@ npm run dev                           # pengembangan
 ```
 
 Back-office: `http://localhost:3000/admin` (password default `admin123`,
-diatur lewat `ADMIN_PASSWORD` di **backend**).
+diatur lewat `ADMIN_PASSWORD` di **backend**; verifikasi sesinya juga di backend).
 
-Salin `.env.example` ke `.env.local`. Kunci penting: `NEXT_PUBLIC_API_URL`
-(alamat backend, opsional — kosong = relatif via rewrite; SSR pakai
-`BACKEND_ORIGIN`). Tanpa `GEMINI_API_KEY` di backend, sistem memakai generator
-lokal dan badge engine menampilkan `local`.
+Variabel environment (tidak ada `.env.example` di repo):
+
+| Variabel | Di mana | Fungsi |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | frontend | alamat backend; kosong = relatif lewat rewrite |
+| `BACKEND_ORIGIN` | frontend (wajib di Vercel) | target rewrite `/api/*` + SSR fetch |
+| `GEMINI_API_KEY` | backend | tanpa ini sistem memakai generator lokal, badge `local` |
+| `ADMIN_PASSWORD` | backend (Render) | password back-office |
 
 Deploy produksi (Vercel, set `BACKEND_ORIGIN` ke URL Render):
 [`../docs/DEPLOY.md`](../docs/DEPLOY.md).
@@ -40,20 +45,21 @@ Keduanya tidak mengakses DB atau logika server — semua lewat `fetch` ke backen
 
 | Path | Isi |
 |---|---|
-| `src/app/page.tsx` | Halaman depan: hero, cara kerja, katalog, tabel harga |
-| `src/app/customizer/[templateId]` | Brief + live preview + checkout |
+| `src/app/page.tsx` | Halaman depan: hero, alur 3 langkah, katalog, harga 2 paket |
+| `src/app/customizer/[templateId]` | Brief + live preview poster + checkout |
 | `src/app/orders` | Lacak pesanan tanpa login (nomor `UK-ORD-XXXX`) |
 | `src/app/admin` | Back-office: statistik, kanban, detail order, delivery |
 | `src/components/shop/` `src/components/admin/` `src/components/ui/` | Komponen React (toast, feedback/skeleton, empty state, kanban) |
-| `src/lib/api.ts` | `API_BASE` — base URL backend untuk SEMUA fetch |
-| `middleware.ts` | gate halaman `/admin/**` (verifikasi token cookie) |
+| `src/lib/api.ts` | `API_BASE` / `API_BASE_SERVER` — base URL backend untuk SEMUA fetch |
+| `middleware.ts` | gate halaman `/admin/**` (verifikasi sesi via `GET /api/admin/session`) |
 
 Aturan: file `"use client"` mengakses backend lewat `fetch` ke
 `${API_BASE}/api/*` dengan `credentials: 'include'` untuk request admin.
 Route `/api/*` diteruskan ke backend via rewrite di `next.config.ts`
 (`BACKEND_ORIGIN`, default `http://localhost:4000`).
 
-Kontrak domain & API: [`docs/SPEC.md`](../docs/SPEC.md). Arah desain:
+Kontrak domain & API: [`docs/REDESIGN.md`](../docs/REDESIGN.md) (terbaru) dan
+[`docs/SPEC.md`](../docs/SPEC.md) (sejauh tidak bertentangan). Arah desain:
 [`design-system/craftai-studio/`](../design-system/craftai-studio/).
 
 ## Verifikasi
@@ -62,7 +68,8 @@ Satu perintah, menyalakan server bersih sendiri per suite (penting: uji
 keamanan sengaja menabrakkan rate limit, jadi penghitung per-IP harus nol):
 
 ```bash
-cd frontend && bash tests/verify.sh
+cd frontend && bash tests/verify.sh                 # Windows (skrip asli)
+bash ~/.hermes/cache/scratch/verify-linux.sh all    # Linux
 ```
 
 Isi suite:

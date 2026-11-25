@@ -1,8 +1,8 @@
-// Kontrak JSON yang di-fetch dari route API (docs/SPEC.md).
+// Kontrak JSON yang di-fetch dari route API (docs/REDESIGN.md §4-§5).
 // Sengaja didefinisikan lokal di folder shop agar halaman customer tidak
 // bergantung pada struktur internal src/lib milik Agent-BACKEND.
 
-export type ThemeColorKey = 'amber' | 'indigo' | 'emerald' | 'rose';
+export type ThemeColorKey = 'violet' | 'navy' | 'amber' | 'emerald';
 export type AIEngine = 'gemini' | 'local';
 export type OrderStatus = 'draft' | 'paid' | 'in_progress' | 'review' | 'completed';
 
@@ -15,14 +15,25 @@ export interface Template {
   base_price: number;
   preview_gradient: string;
   is_active: number;
+  /** Kunci paket yang disarankan backend per segmen (mis. 'hemat'). */
+  recommendedPackage?: string | null;
 }
 
+export interface PosterPoint {
+  icon: string;
+  title: string;
+  description: string;
+}
+
+/** Skema draft poster (docs/REDESIGN.md §4). */
 export interface Draft {
   brand: { name: string; tagline: string; about: string };
   theme: { primaryColor: string; accentColor: string; fontPairing: string };
-  heroSection: { badge: string; headline: string; subheadline: string; ctaText: string };
-  features: { icon: string; title: string; description: string }[];
-  faq: { q: string; a: string }[];
+  poster: { badge: string; headline: string; subheadline: string; ctaText: string };
+  points: PosterPoint[];
+  /** Skema lama (website) — dibaca bila baris draft berasal dari database lama. */
+  heroSection?: { badge: string; headline: string; subheadline: string; ctaText: string };
+  features?: PosterPoint[];
 }
 
 export interface Brief {
@@ -52,6 +63,10 @@ export interface Order {
   contact_whatsapp: string;
   contact_email: string;
   package_name: string;
+  /** 'satuan' | 'hemat' — kunci paket yang dikirim saat checkout. */
+  package_key?: string | null;
+  /** Kuota poster dalam satu order (1 atau 3). */
+  quota?: number | null;
   live_website_url: string | null;
   download_zip_url: string | null;
   dev_note: string | null;
@@ -68,10 +83,23 @@ export interface OrderLog {
   timestamp: string;
 }
 
+/** Satu baris ai_drafts milik order (kuota paket hemat). */
+export interface OrderDraft {
+  id: string;
+  template_id?: string | null;
+  input_prompt_data?: Brief | null;
+  ai_generated_content?: Draft | null;
+  generated_at?: string | null;
+}
+
 export interface OrderResponse {
   order: Order;
   draft: { id: string; ai_generated_content: Draft; template_id: string } | null;
   logs: OrderLog[];
+  /** Semua draft milik order (docs/REDESIGN.md §5). */
+  drafts?: OrderDraft[];
+  /** Sisa kuota poster = quota - jumlah draft. */
+  remaining?: number;
 }
 
 export interface OrderCreatedResponse {
@@ -84,53 +112,50 @@ export interface ApiError {
   error: string;
 }
 
+/** Kartu paket dari GET /api/packages (docs/REDESIGN.md §2). */
 export interface PackageOption {
-  id: string;
+  key: string;
   name: string;
   price: number;
-  summary: string;
+  quota: number;
+  eta?: string | null;
+  guarantee?: string | null;
+  /** Bentuk gabungan bila backend mengirimnya sebagai satu string. */
+  etaGuarantee?: string | null;
+  description?: string | null;
+  summary?: string | null;
 }
 
-export const PACKAGES: PackageOption[] = [
-  {
-    id: 'basic',
-    name: 'Basic',
-    price: 150000,
-    summary: 'Template + draft AI, 1x revisi minor, deploy standar.',
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: 250000,
-    summary: 'Basic + penulisan ulang konten + integrasi tombol WhatsApp.',
-  },
-  {
-    id: 'premium',
-    name: 'Premium',
-    price: 350000,
-    summary: 'Pro + kustom domain, optimasi kecepatan, prioritas antrean.',
-  },
+export const THEME_OPTIONS: { value: ThemeColorKey; label: string; primary: string; accent: string }[] = [
+  { value: 'violet', label: 'Violet modern', primary: '#8b5cf6', accent: '#6d28d9' },
+  { value: 'navy', label: 'Navy tepercaya', primary: '#3b4bd8', accent: '#2735a8' },
+  { value: 'amber', label: 'Amber hangat', primary: '#f59e0b', accent: '#b45309' },
+  { value: 'emerald', label: 'Emerald segar', primary: '#10b981', accent: '#047857' },
 ];
 
 export const STATUS_STEPS: { key: OrderStatus; label: string; hint: string }[] = [
-  { key: 'draft', label: 'Draft AI', hint: 'Konten dibuat' },
+  { key: 'draft', label: 'Brief diterima', hint: 'Brief masuk antrean' },
   { key: 'paid', label: 'Pembayaran', hint: 'Terverifikasi' },
-  { key: 'in_progress', label: 'Dikerjakan', hint: 'Developer eksekusi' },
-  { key: 'review', label: 'Review', hint: 'Cek mutu & deploy' },
-  { key: 'completed', label: 'Selesai', hint: 'Live + source code' },
+  { key: 'in_progress', label: 'Dikerjakan', hint: 'Editor menyusun poster' },
+  { key: 'review', label: 'Review editor', hint: 'Cek mutu & ketepatan brief' },
+  { key: 'completed', label: 'Selesai', hint: 'Poster siap pakai' },
 ];
 
 export const CATEGORY_LABELS: Record<string, string> = {
-  fnb: 'Kuliner & Cafe',
-  portfolio: 'Portofolio & Agensi',
-  shop: 'Toko Online & Retail',
+  kuliner: 'Kuliner',
+  kreator: 'Kreator',
+  toko: 'Toko Online',
+  // Kategori lama di database yang belum dimigrasi tetap terbaca jelas.
+  fnb: 'Kuliner',
+  portfolio: 'Kreator',
+  shop: 'Toko Online',
 };
 
 export const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft AI',
+  draft: 'Brief diterima',
   paid: 'Pembayaran masuk',
   in_progress: 'Sedang dikerjakan',
-  review: 'Menunggu review',
+  review: 'Review editor',
   completed: 'Selesai',
 };
 
@@ -144,6 +169,26 @@ export function statusLabel(status: string): string {
 
 export function formatRupiah(value: number): string {
   return `Rp ${value.toLocaleString('id-ID')}`;
+}
+
+/** Estimasi waktu kerja dari kartu paket; kosong bila backend tidak mengirim. */
+export function packageEta(pkg: PackageOption): string {
+  return (pkg.eta ?? '').trim() || (pkg.etaGuarantee ?? '').trim();
+}
+
+/** Garansi dari kartu paket. Bila backend hanya mengirim eta gabungan dan eta
+ *  sudah dipakai di atas, baris garansi disembunyikan (bukan diisi teks dobel). */
+export function packageGuarantee(pkg: PackageOption): string {
+  const guarantee = (pkg.guarantee ?? '').trim();
+  if (guarantee) return guarantee;
+  return pkg.eta ? '' : (pkg.etaGuarantee ?? '').trim();
+}
+
+/** Deskripsi isi paket: diprioritaskan dari backend, bukan teks hardcode. */
+export function packageSummary(pkg: PackageOption): string {
+  const text = (pkg.description ?? pkg.summary ?? '').trim();
+  if (text) return text;
+  return `${pkg.quota} poster per order`;
 }
 
 /** Baca body JSON apa pun: 2xx → data, selain itu → pesan error dari server. */

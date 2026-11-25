@@ -11,6 +11,8 @@ import {
   ALL_STATUSES,
   formatDate,
   formatRupiah,
+  quotaOf,
+  quotaSummary,
   type AdminOrder,
   type OrderStatus,
 } from './types';
@@ -51,6 +53,10 @@ export default function KanbanCard({
   // 401 = cookie sesi habis. Ditandai terpisah supaya kartu menampilkan
   // perbaikan yang benar (login ulang), bukan "coba lagi".
   const [expired, setExpired] = useState(false);
+
+  // Kuota paket (Satuan 1 / Paket Hemat 3) + sisa poster. Bila backend belum
+  // mengirim kolom kuota, kartu menampilkan "—" alih-alih mengarang angka.
+  const quota = quotaSummary(quotaOf(order));
 
   async function moveStatus(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -120,6 +126,10 @@ export default function KanbanCard({
             <dd className="truncate font-semibold text-ink tabular-nums">
               {formatRupiah(order.total_price)}
             </dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="shrink-0">Kuota</dt>
+            <dd className={`truncate tabular-nums ${quota.tone}`}>{quota.text}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <dt className="shrink-0">WhatsApp</dt>

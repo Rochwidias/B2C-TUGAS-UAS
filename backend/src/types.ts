@@ -1,9 +1,10 @@
-// Kontrak domain — satu-satunya sumber kebenaran tipe aplikasi (lihat docs/SPEC.md).
+// Kontrak domain — satu-satunya sumber kebenaran tipe aplikasi
+// (docs/REDESIGN.md §2–§4 menggantikan docs/SPEC.md sejauh bertentangan).
 
 export type OrderStatus = 'draft' | 'paid' | 'in_progress' | 'review' | 'completed';
 export type PaymentStatus = 'unpaid' | 'paid';
 export type Role = 'customer' | 'admin' | 'developer';
-export type ThemeColorKey = 'amber' | 'indigo' | 'emerald' | 'rose';
+export type ThemeColorKey = 'violet' | 'navy' | 'amber' | 'emerald';
 export type AIEngine = 'gemini' | 'local';
 
 export interface Template {
@@ -28,6 +29,8 @@ export interface Order {
   contact_whatsapp: string;
   contact_email: string;
   package_name: string;
+  package_key: string | null;
+  quota: number;
   live_website_url: string | null;
   download_zip_url: string | null;
   dev_note: string | null;
@@ -65,30 +68,27 @@ export interface DraftTheme {
   fontPairing: string;
 }
 
-export interface DraftHero {
+/** Diganti `heroSection` (skema website lama) — lihat docs/REDESIGN.md §4. */
+export interface DraftPoster {
   badge: string;
   headline: string;
   subheadline: string;
   ctaText: string;
 }
 
-export interface DraftFeature {
+/** `points` wajib tepat 3; menggantikan `features`. */
+export interface DraftPoint {
   icon: string;
   title: string;
   description: string;
 }
 
-export interface DraftFaq {
-  q: string;
-  a: string;
-}
-
+/** Skema draft poster (docs/REDESIGN.md §4). `faq` dan `heroSection` tidak ada. */
 export interface Draft {
   brand: DraftBrand;
   theme: DraftTheme;
-  heroSection: DraftHero;
-  features: DraftFeature[];
-  faq: DraftFaq[];
+  poster: DraftPoster;
+  points: DraftPoint[];
 }
 
 export interface DraftBrief {
@@ -104,4 +104,16 @@ export interface DraftBrief {
 export interface GenerateDraftResult {
   content: Draft;
   engine: AIEngine;
+}
+
+/** Satu baris paket dari `GET /api/packages` (docs/REDESIGN.md §2). */
+export interface PackageOption {
+  key: string;
+  name: string;
+  price: number;
+  quota: number;
+  eta: string;
+  guarantee: string;
+  description: string;
+  etaGuarantee: string;
 }

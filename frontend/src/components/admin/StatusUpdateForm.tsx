@@ -145,7 +145,7 @@ export default function StatusUpdateForm({ order }: { order: AdminOrder }) {
             rows={4}
             disabled={busy}
             maxLength={2000}
-            placeholder="Contoh: revisi headline hero sudah diterapkan, tinggal deploy."
+            placeholder="Contoh: revisi headline poster sudah diterapkan, tinggal dikirim ke customer."
             className="w-full resize-y border border-rule bg-paper px-2.5 py-2 text-[12.5px] leading-relaxed text-ink placeholder:text-ink-soft/80 transition focus:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
           />
         </div>

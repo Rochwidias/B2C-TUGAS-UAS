@@ -1,13 +1,14 @@
-// Server HTTP backend CraftAI Studio — Express + node:sqlite, port 4000.
-// Semua endpoint /api/* dipindahkan dari route handler Next.js lama tanpa
-// mengubah bentuk respons (status + pesan error identik, dipakai test_api.py
-// & test_security.py).
+// Server HTTP backend Aether Creative — Express + node:sqlite, port 4000.
+// Semua endpoint /api/* mengikuti kontrak docs/REDESIGN.md §5 (dan docs/SPEC.md
+// sejauh tidak bertentangan): status + pesan error jujur, dipakai test_api.py
+// & test_security.py.
 
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
 import templatesRouter from './routes/templates';
+import packagesRouter from './routes/packages';
 import draftsRouter from './routes/drafts';
 import ordersRouter from './routes/orders';
 import deliveryRouter from './routes/delivery';
@@ -31,9 +32,10 @@ const app = express();
 
 // Di belakang proxy Render, setiap request tampak berasal dari IP proxy, yang
 // membuat rate limit per-IP berbagi satu ember. `trust proxy` 1 hop mengembalikan
-// req.ip dari X-Forwarded-For. Hanya dipercaya di production — di dev/test lokal
-// header itu bisa dipalsukan (test_security.py mengandalkan perilaku ini).
-if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+// req.ip dari X-Forwarded-For. Di luar produksi trust dimatikan TEGAS (bukan
+// default 'loopback') supaya XFF yang dikendalikan klien tidak pernah
+// mengubah req.ip (audit §12: bypass rate limit via X-Forwarded-For).
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
 
 // X-Powered-By disembunyikan (test_security.py memeriksanya).
 app.disable('x-powered-by');
@@ -78,6 +80,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 getDb();
 
 app.use(templatesRouter);
+app.use(packagesRouter);
 app.use(draftsRouter);
 app.use(ordersRouter);
 app.use(deliveryRouter);
@@ -108,5 +111,5 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`[backend] CraftAI Studio API berjalan di http://localhost:${PORT}`);
+  console.log(`[backend] Aether Creative API berjalan di http://localhost:${PORT}`);
 });

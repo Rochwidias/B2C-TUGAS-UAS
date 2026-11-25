@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
 // Footer faktual: hanya tautan ke bagian dan halaman yang benar-benar ada.
-// Tidak ada klaim jumlah klien, uptime, atau testimoni (R-17, R-18).
+// Tagline dan nilai jual mengikuti docs/REDESIGN.md §1; tidak ada klaim jumlah
+// klien, uptime, atau testimoni.
 export function Footer() {
   return (
     <footer className="mt-16 border-t border-rule bg-paper">
@@ -10,16 +11,16 @@ export function Footer() {
           <div className="max-w-xs">
             <div className="flex items-center gap-2">
               <span
-                className="grid size-8 place-items-center border border-ink bg-ink font-mono text-[11px] font-bold text-paper"
+                className="grid size-8 place-items-center border border-ink bg-accent font-mono text-[11px] font-bold text-accent-ink"
                 aria-hidden="true"
               >
-                CS
+                AC
               </span>
-              <span className="text-sm font-semibold">CraftAI Studio</span>
+              <span className="text-sm font-semibold">Aether Creative</span>
             </div>
             <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
-              Layanan kustomisasi template website: brief Anda diolah menjadi draft konten, lalu
-              developer yang menulis dan men-deploy kode finalnya.
+              Platform pembuatan poster untuk membantu UMKM lebih tepercaya. Cepat, terjangkau,
+              sesuai karakter usaha, dan lebih tepercaya.
             </p>
           </div>
 
@@ -33,7 +34,7 @@ export function Footer() {
               Cara kerja
             </Link>
             <Link href="/#katalog" className="flex min-h-11 items-center text-ink-soft hover:text-ink hover:underline">
-              Katalog template
+              Contoh poster
             </Link>
             <Link href="/#paket" className="flex min-h-11 items-center text-ink-soft hover:text-ink hover:underline">
               Harga paket
@@ -45,7 +46,7 @@ export function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col gap-2 border-t border-rule pt-6 text-[11px] text-ink-soft sm:flex-row sm:items-center sm:justify-between">
-          <p>© 2026 CraftAI Studio. Proyek tugas akhir, bukan layanan komersial.</p>
+          <p>© 2026 Aether Creative. Proyek tugas akhir, bukan layanan komersial.</p>
           <p className="font-mono">Pembayaran &amp; delivery pada demo ini adalah simulasi.</p>
         </div>
       </div>

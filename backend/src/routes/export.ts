@@ -5,7 +5,7 @@ import { renderDraftToHtml } from '../lib/render';
 
 const router = Router();
 
-// GET /api/export/:draftId — hasilkan HTML mandiri sebagai attachment.
+// GET /api/export/:draftId — HTML poster siap pakai sebagai attachment (§4).
 router.get('/api/export/:draftId', (req: Request, res: Response, _next: NextFunction): void => {
   const { draftId } = req.params;
   // Id di URL bisa merujuk draft bebas ataupun id order; keduanya diterima
@@ -13,11 +13,13 @@ router.get('/api/export/:draftId', (req: Request, res: Response, _next: NextFunc
   const draft = getDraft(draftId) ?? getDraftByOrderId(draftId);
   if (!draft) { sendError(res, 'Draft tidak ditemukan.', 404); return; }
 
+  // Konten draft sudah di-escape oleh renderer sebelum masuk HTML.
   const html = renderDraftToHtml(draft.ai_generated_content, getTemplate(draft.template_id));
-  const filename = `${(draft.ai_generated_content.brand.name || 'website')
+  const slug = (draft.ai_generated_content.brand.name || 'poster')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') || 'website'}-${draftId.slice(0, 8)}.html`;
+    .replace(/^-|-$/g, '') || 'poster';
+  const filename = `${slug}-poster-${draftId.slice(0, 8)}.html`;
 
   res
     .status(200)

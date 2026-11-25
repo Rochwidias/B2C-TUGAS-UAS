@@ -1,12 +1,14 @@
 // Lapisan AI: memanggil Gemini 2.5 Flash bila GEMINI_API_KEY tersedia,
 // selalu dengan fallback generator lokal deterministik yang mengikuti skema
-// JSON di docs/SPEC.md. Tidak ada API key di environment -> engine 'local'.
+// draft poster di docs/REDESIGN.md §4. Tanpa key (atau key invalid) -> engine 'local'.
 
-import type { Draft, DraftBrief, DraftFeature, GenerateDraftResult, ThemeColorKey } from '../types';
-import { validateDraftSchema } from './validate';
+import type { Draft, DraftBrief, DraftPoint, GenerateDraftResult, ThemeColorKey } from '../types';
+import { normalizeDraftSchema } from './validate';
 
-// System prompt persis dari PLAN.md §6 (jangan diubah tanpa izin user).
-export const GEMINI_SYSTEM_PROMPT = `Anda adalah asisten AI arsitek web profesional. Tugas Anda adalah memodifikasi template website standar sesuai dengan identitas bisnis yang diberikan oleh customer.
+// System prompt skema poster (docs/REDESIGN.md §4) — `faq` dan `heroSection`
+// sengaja tidak disebut karena sudah dihapus dari kontrak.
+export const GEMINI_SYSTEM_PROMPT = `Anda adalah asisten AI desainer poster promosi untuk UMKM Indonesia (Aether Creative).
+Tugas Anda: membuat konten poster SIAP PAKAI dari brief customer — bahasa Indonesia, profesional, tanpa lorem ipsum, tanpa mengarang fakta di luar brief.
 
 Berikan respon WAJIB dalam format JSON murni tanpa markdown pembungkus dengan struktur:
 {
@@ -20,30 +22,38 @@ Berikan respon WAJIB dalam format JSON murni tanpa markdown pembungkus dengan st
     "accentColor": "hex code",
     "fontPairing": "string"
   },
-  "heroSection": {
+  "poster": {
     "badge": "string",
     "headline": "string",
     "subheadline": "string",
     "ctaText": "string"
   },
-  "features": [
+  "points": [
     {"icon": "string", "title": "string", "description": "string"},
     {"icon": "string", "title": "string", "description": "string"},
     {"icon": "string", "title": "string", "description": "string"}
-  ],
-  "faq": [
-    {"q": "string", "a": "string"},
-    {"q": "string", "a": "string"}
   ]
-}`;
+}
 
-// Pemetaan themeColor -> hex mengikuti docs/SPEC.md (baris pemetaan warna).
+Aturan:
+- "points" WAJIB tepat 3 item (alasan utama customer percaya), bukan 2 atau 4.
+- "poster.headline" maksimal 60 karakter, "poster.subheadline" maksimal 160 karakter.
+- Semua teks maksimal 400 karakter.
+- Pakai NAMA BRAND dari brief di mana pun wajar.
+- "theme.primaryColor"/"theme.accentColor" harus hex #RRGGBB mengikuti warna tema brief.
+- "icon" salah satu dari: tag, clock, sparkles, map-pin, message-circle, truck, star, shopping-bag, utensils, layers, handshake, megaphone.
+- Jangan menyertakan "faq" atau "heroSection".`;
+
+// Pemetaan themeColor -> hex persis docs/REDESIGN.md §4 (primary -> accent).
 export const THEME_HEX: Record<ThemeColorKey, { primary: string; accent: string }> = {
+  violet: { primary: '#8b5cf6', accent: '#6d28d9' },
+  navy: { primary: '#3b4bd8', accent: '#2735a8' },
   amber: { primary: '#f59e0b', accent: '#b45309' },
-  indigo: { primary: '#6366f1', accent: '#4338ca' },
   emerald: { primary: '#10b981', accent: '#047857' },
-  rose: { primary: '#f43f5e', accent: '#be123c' },
 };
+
+/** Enum `themeColor` yang diterima brief (§4): violet|navy|amber|emerald. */
+export const THEME_KEYS = Object.keys(THEME_HEX) as ThemeColorKey[];
 
 export const FONT_PAIRINGS: Record<string, string> = {
   formal: 'Inter + Source Serif 4',
@@ -52,82 +62,90 @@ export const FONT_PAIRINGS: Record<string, string> = {
   mewah: 'Playfair Display + Inter',
 };
 
-interface TopicModel {
-  topic: string;
+interface SegmentModel {
+  segment: 'kuliner' | 'kreator' | 'toko' | 'umum';
+  label: string;
   audience: string;
-  offering: string;
   usp: string;
   hours?: string;
-  features: DraftFeature[];
+  points: DraftPoint[];
 }
 
-const isFnb = (text: string): boolean => /\bkopi|cafe|resto|restoran|kuliner|makanan|minuman|bakso|mie|sate|teh|warung|dapur|katering|catering|roti|kue|jus|sambal|boba|seafood|pizza|burger|ayam|susu|biji\b/i.test(text);
-const isShop = (text: string): boolean => /\btoko|produk|jualan|jual|stok|harga|ekspedisi|pengiriman|reseller|dropship|butik|fashion|pakaian|kaos|sepatu|kosmetik|skincare|elektronik|olshop|marketplace|keranjang|checkout\b/i.test(text);
-const isPortfolio = (text: string): boolean => /\bportofolio|portfolio|klien|proyek|desain|desainer|fotografer|developer|enginer|engineer|konsultan|jasa|agensi|agency|layanan profesional|resume|cv\b/i.test(text);
+const isKuliner = (text: string): boolean => /\bkopi|cafe|resto|restoran|kuliner|makanan|minuman|bakso|mie|sate|teh|warung|dapur|katering|catering|roti|kue|jus|sambal|boba|seafood|pizza|burger|ayam|susu|biji|jajanan|soto\b/i.test(text);
+const isToko = (text: string): boolean => /\btoko|produk|jualan|jual|stok|harga|ekspedisi|pengiriman|reseller|dropship|butik|fashion|pakaian|kaos|sepatu|kosmetik|skincare|elektronik|olshop|marketplace|keranjang|checkout|preloved|thrift\b/i.test(text);
+const isKreator = (text: string): boolean => /\bportofolio|portfolio|kreator|konten|creator|klien|proyek|desain|desainer|fotografer|video|editor|developer|engineer|konsultan|jasa|agensi|agency|layanan profesional|resume|cv|ilustrator|musisi\b/i.test(text);
 
-function detectTopic(brief: DraftBrief): TopicModel {
+/**
+ * Deteksi segmen dari brief: menentukan label badge, sudut pandang 3 poin,
+ * dan gaya bahasa poster. Selalu memakai nama brand milik customer.
+ */
+function detectSegment(brief: DraftBrief): SegmentModel {
   const corpus = `${brief.description} ${brief.tagline} ${brief.templateId}`;
   const name = brief.brandName.trim() || 'Bisnis Anda';
+  const hours = extractHours(brief.description);
 
-  if (isFnb(corpus)) {
+  if (isKuliner(corpus)) {
     return {
-      topic: 'kuliner',
+      segment: 'kuliner',
+      label: 'Kuliner',
       audience: 'pelanggan yang mencari tempat makan nyaman dengan cita rasa konsisten',
-      offering: 'menu andalan yang dibuat segar setiap hari',
-      usp: 'bahan pilihan, resep turun-temurun, dan pelayanan yang membuat pelanggan betah berlama-lama',
-      hours: extractHours(brief.description),
-      features: [
-        { icon: 'utensils', title: 'Menu Andalan Setiap Hari', description: `Menu pilihan dari ${name} yang diracik dari bahan segar, konsisten dari kunjungan pertama sampai kesekian.` },
-        { icon: 'map-pin', title: 'Lokasi & Jam Buka Jelas', description: `Alamat dan jam operasional ${name} ditampilkan di halaman depan agar pelanggan tidak salah datang.` },
-        { icon: 'message-circle', title: 'Reservasi lewat WhatsApp', description: `Pesan meja atau pesan antar langsung dari tombol WhatsApp tanpa perlu aplikasi tambahan.` },
+      usp: 'bahan pilihan dan pelayanan yang membuat pelanggan betah kembali',
+      hours,
+      points: [
+        { icon: 'utensils', title: 'Menu Andalan Setiap Hari', description: `${name} menyajikan menu pilihan yang diracik segar, konsisten dari kunjungan pertama sampai berikutnya.` },
+        { icon: 'tag', title: 'Promo Spesial Pelanggan Baru', description: `Diskon dan bundling hemat khusus untuk yang pertama kali pesan di ${name}.` },
+        { icon: 'message-circle', title: 'Pesan Lewat WhatsApp', description: `Booking atau pesan antar langsung dari tombol WhatsApp — tanpa aplikasi tambahan.` },
       ],
     };
   }
 
-  if (isShop(corpus)) {
+  if (isToko(corpus)) {
     return {
-      topic: 'toko online',
-      audience: 'pembeli yang ingin berbelanja cepat, aman, dan bisa langsung dikonfirmasi',
-      offering: 'produk unggulan dengan stok yang selalu diperbarui',
-      usp: 'foto jujur, harga transparan, dan pengiriman yang dipantau sampai sampai ke tangan pembeli',
-      features: [
-        { icon: 'shopping-bag', title: 'Katalog Produk Lengkap', description: `Produk unggulan ${name} dengan foto jujur, harga transparan, dan stok yang selalu diperbarui.` },
-        { icon: 'truck', title: 'Pengiriman Ke Seluruh Indonesia', description: `Pesanan diproses cepat dan dikirim lewat ekspedisi pilihan, nomor resi dikirim otomatis via WhatsApp.` },
-        { icon: 'lock', title: 'Checkout Aman & Konfirmasi Cepat', description: `Pembayaran diproses aman dan pesanan dikonfirmasi langsung oleh tim ${name} dalam hitungan menit.` },
+      segment: 'toko',
+      label: 'Toko Online',
+      audience: 'pembeli yang ingin belanja cepat, aman, dan langsung dikonfirmasi',
+      usp: 'foto jujur, harga transparan, dan pengiriman yang dipantau sampai ke tangan pembeli',
+      hours,
+      points: [
+        { icon: 'shopping-bag', title: 'Produk Unggulan Terpilih', description: `Kurasi produk ${name} dengan foto jujur, harga transparan, dan stok yang selalu diperbarui.` },
+        { icon: 'truck', title: 'Pengiriman Ke Seluruh Indonesia', description: `Pesanan diproses cepat, nomor resi dikirim otomatis lewat WhatsApp.` },
+        { icon: 'message-circle', title: 'Konfirmasi Order Kilat', description: `Keranjang belanja dikonfirmasi langsung oleh tim ${name} dalam hitungan menit.` },
       ],
     };
   }
 
-  if (isPortfolio(corpus)) {
+  if (isKreator(corpus)) {
     return {
-      topic: 'portofolio profesional',
-      audience: 'klien yang menilai kualitas kerja sebelum memutuskan bekerja sama',
-      offering: 'layanan dan karya yang bisa dilihat langsung',
-      usp: 'proses kerja transparan, komunikasi rapi, dan hasil yang diukur dari tujuan bisnis klien',
-      features: [
-        { icon: 'folders', title: 'Karya & Studi Kasus', description: `Portofolio ${name} berisi karya terpilih beserta konteks masalah dan hasil yang dicapai klien.` },
-        { icon: 'handshake', title: 'Proses Kerja Transparan', description: `Setiap tahap proyek dikomunikasikan dengan jadwal dan ruang lingkup yang disepakati di awal.` },
-        { icon: 'trending-up', title: 'Hasil Terukur', description: `Pekerjaan dievaluasi dari indikator yang disepakati klien, bukan sekadar tampilan yang enak dilihat.` },
+      segment: 'kreator',
+      label: 'Kreator',
+      audience: 'klien yang menilai kualitas karya sebelum bekerja sama',
+      usp: 'proses kerja transparan dan hasil yang diukur dari tujuan klien',
+      hours,
+      points: [
+        { icon: 'layers', title: 'Portofolio Karya Terpilih', description: `Karya ${name} beserta konteks masalah dan hasil yang sudah dicapai bersama klien.` },
+        { icon: 'handshake', title: 'Booking Jasa Tanpa Ribet', description: `Pilih layanan, kirim brief, dan dapatkan estimasi pengerjaan di hari yang sama.` },
+        { icon: 'clock', title: 'Respon Cepat di Jam Kerja', description: `Pertanyaan dan penawaran dijawab lewat WhatsApp, rata-rata dalam beberapa menit.` },
       ],
     };
   }
 
   return {
-    topic: 'bisnis',
+    segment: 'umum',
+    label: 'Promo',
     audience: 'pelanggan yang membutuhkan layanan cepat, jelas, dan bisa dipercaya',
-    offering: 'layanan unggulan dengan tim yang siap membantu',
     usp: 'komunikasi cepat, harga transparan, dan hasil yang bisa dipertanggungjawabkan',
-    features: [
-      { icon: 'star', title: 'Layanan Unggulan', description: `Andalan dari ${name} yang dikerjakan dengan standar kualitas konsisten dan bisa diminta kapan saja.` },
-      { icon: 'handshake', title: 'Konsultasi Gratis', description: `Bicarakan kebutuhan Anda dulu dengan tim ${name} sebelum memutuskan. Tanpa biaya, tanpa tekanan.` },
-      { icon: 'zap', title: 'Respon Cepat', description: `Pertanyaan dan pesanan dijawab lewat WhatsApp pada jam kerja, rata-rata dalam beberapa menit.` },
+    hours,
+    points: [
+      { icon: 'star', title: 'Layanan Unggulan', description: `Andalan dari ${name} yang dikerjakan dengan standar kualitas konsisten.` },
+      { icon: 'tag', title: 'Harga Transparan Tanpa Kejutan', description: `Semua biaya dijelaskan di awal — tidak ada tambahan tersembunyi setelah pesanan jalan.` },
+      { icon: 'message-circle', title: 'Konsultasi Gratis', description: `Bicarakan kebutuhan Anda dulu dengan tim ${name} sebelum memutuskan.` },
     ],
   };
 }
 
 function extractHours(description: string): string | undefined {
   const match = description.match(/\b(\d{1,2}[.:]\d{2})\s*[-–]\s*(\d{1,2}[.:]\d{2})\b/);
-  return match ? `Buka ${match[1].replace(':', '.')} - ${match[2].replace(':', '.')}` : undefined;
+  return match ? `Buka ${match[1].replace(':', '.')} – ${match[2].replace(':', '.')}` : undefined;
 }
 
 function toneHint(tone: string): string {
@@ -152,63 +170,77 @@ function describeBrief(brief: DraftBrief): string {
   return parts.join('\n');
 }
 
+/**
+ * Rapikan brief lama (skema CraftAI: themeColor `indigo`/`rose`) menjadi brief
+ * skema baru. Dipakai migrasi data & penyusunan brief dari body request yang
+ * parsial, supaya generator lokal tidak pernah menerima nilai undefined.
+ */
+export function normalizeBrief(raw: unknown): DraftBrief {
+  const source = (typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const text = (key: string): string => (typeof source[key] === 'string' ? (source[key] as string) : '');
+  const theme = text('themeColor');
+  const themeColor: ThemeColorKey = (theme === 'violet' || theme === 'navy' || theme === 'amber' || theme === 'emerald')
+    ? theme
+    : 'violet';
+  return {
+    templateId: text('templateId'),
+    brandName: text('brandName'),
+    tagline: text('tagline'),
+    description: text('description'),
+    themeColor,
+    ctaText: text('ctaText'),
+    toneOfVoice: text('toneOfVoice'),
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Generator lokal deterministik
+// Generator lokal deterministik (tanpa GEMINI_API_KEY / saat output AI invalid)
 // ---------------------------------------------------------------------------
+
+/** Potong panjang dengan tanda elipsis supaya medan poster tidak membengkak. */
+function trimTo(value: string, max: number): string {
+  const clean = value.trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+}
 
 export function generateLocalDraft(brief: DraftBrief): Draft {
   const name = brief.brandName.trim() || 'Bisnis Anda';
   const tagline = brief.tagline.trim() || 'Kualitas yang bisa Anda andalkan setiap hari';
   const tone = toneHint(brief.toneOfVoice);
-  const model = detectTopic(brief);
-  const hex = THEME_HEX[brief.themeColor] ?? THEME_HEX.indigo;
+  const model = detectSegment(brief);
+  const hex = THEME_HEX[brief.themeColor] ?? THEME_HEX.violet;
   const cta = brief.ctaText.trim() || 'Hubungi Kami Sekarang';
   const fontPairing = FONT_PAIRINGS[brief.toneOfVoice.trim().toLowerCase()] ?? 'Inter + Fraunces';
 
-  const badge = model.hours ?? `${model.topic.charAt(0).toUpperCase()}${model.topic.slice(1)} • ${name}`;
-
-  const heroHeadline = tagline.endsWith('.') ? tagline.slice(0, -1) : tagline;
-
+  const badge = model.hours ?? `${model.label} • ${name}`;
+  const headline = trimTo(tagline.replace(/\.$/, ''), 60);
+  const subheadline = buildSubheadline(brief, model);
   const about = buildAbout(brief, model, tone);
 
   return {
-    brand: { name, tagline, about },
+    brand: { name, tagline: trimTo(tagline, 140), about: trimTo(about, 400) },
     theme: { primaryColor: hex.primary, accentColor: hex.accent, fontPairing },
-    heroSection: {
-      badge,
-      headline: heroHeadline,
-      subheadline: buildSubheadline(brief, model),
-      ctaText: cta,
-    },
-    features: model.features,
-    faq: [
-      {
-        q: `Apa saja yang ditawarkan ${name}?`,
-        a: `${name} berfokus pada ${model.offering} untuk ${model.audience}. ${model.usp.charAt(0).toUpperCase()}${model.usp.slice(1)}.`,
-      },
-      {
-        q: 'Bagaimana cara memesan atau menghubungi kami?',
-        a: `Klik tombol "${cta}" untuk chat WhatsApp, atau kirim email ke alamat yang tercantum di halaman kontak. Tim kami balas pada jam kerja.`,
-      },
-    ],
+    poster: { badge: trimTo(badge, 60), headline, subheadline, ctaText: trimTo(cta, 40) },
+    points: model.points.map((point) => ({
+      icon: point.icon,
+      title: trimTo(point.title, 80),
+      description: trimTo(point.description, 240),
+    })),
   };
 }
 
-function buildSubheadline(brief: DraftBrief, model: TopicModel): string {
+function buildSubheadline(brief: DraftBrief, model: SegmentModel): string {
   const name = brief.brandName.trim() || 'Bisnis Anda';
   const description = brief.description.trim();
-  const trimmed = description.length > 160 ? `${description.slice(0, 157).trimEnd()}…` : description;
-  if (trimmed) return `${trimmed} ${model.usp.charAt(0).toUpperCase()}${model.usp.slice(1)} untuk ${model.audience}.`;
-  return `${name} melayani ${model.audience} dengan ${model.offering}.`;
+  if (description) return trimTo(`${description} ${model.usp.charAt(0).toUpperCase()}${model.usp.slice(1)} untuk ${model.audience}.`, 160);
+  return trimTo(`${name} melayani ${model.audience} — ${model.usp}.`, 160);
 }
 
-function buildAbout(brief: DraftBrief, model: TopicModel, tone: string): string {
+function buildAbout(brief: DraftBrief, model: SegmentModel, tone: string): string {
   const name = brief.brandName.trim() || 'Bisnis Anda';
-  const tagline = brief.tagline.trim();
-  const hours = model.hours ? `${name} buka ${model.hours}. ` : '';
-  // Deskripsi brief sudah terpakai di subheadline hero, jadi bagian ini hanya
-  // menyebut jam buka + tagline agar konten tidak mengulang kalimat yang sama.
-  return `Tone suara situs ini ${tone}. ${hours}${name} melayani ${model.audience} lewat ${model.offering}. ${tagline || `${name.charAt(0).toUpperCase()}${name.slice(1)}, ${model.usp}.`}`;
+  const hours = model.hours ? `${name} ${model.hours.toLowerCase()}. ` : '';
+  return `Poster dibuat dengan nada ${tone}. ${hours}${name} melayani ${model.audience} dengan ${model.usp}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,12 +294,11 @@ async function callGemini(brief: DraftBrief): Promise<Draft> {
     };
     const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
     if (!text) throw new Error('Gemini mengembalikan kandidat kosong');
-    const parsed = extractJsonPayload(text);
-    const issues = validateDraftSchema(parsed);
-    if (issues.length > 0) {
-      throw new Error(`Output Gemini tidak valid: ${issues.map((issue) => `${issue.path} ${issue.message}`).join('; ')}`);
+    const normalized = normalizeDraftSchema(extractJsonPayload(text));
+    if (normalized.issues.length > 0 || !normalized.draft) {
+      throw new Error(`Output Gemini tidak valid: ${normalized.issues.map((issue) => `${issue.path} ${issue.message}`).join('; ')}`);
     }
-    return parsed as Draft;
+    return normalized.draft;
   } finally {
     clearTimeout(timer);
   }

@@ -1,6 +1,6 @@
-# Deploy CraftAI Studio: Vercel (frontend) + Render (backend)
+# Deploy Aether Creative: Vercel (frontend) + Render (backend)
 
-Cara termudah deploy CraftAI Studio. Frontend di Vercel, backend (API Express)
+Cara termudah deploy Aether Creative. Frontend di Vercel, backend (API Express)
 di Render. Semua trafik produksi lewat **rewrite Next.js** (satu origin), jadi
 frontend dan API tampak dari domain yang sama — tidak ada masalah CORS, cookie
 login admin tetap same-site, dan env yang perlu diisi sedikit.
@@ -69,8 +69,13 @@ Anda mengisinya di Langkah C.
    tetap dianjurkan.
 3. `ADMIN_PASSWORD` = password back-office pilihan Anda. Bila dibiarkan kosong,
    backend memakai default `admin123`.
+   **Catatan redesign:** verifikasi sesi admin dilakukan oleh **backend**
+   (`frontend/middleware.ts` memanggil `GET /api/admin/session`), jadi
+   `ADMIN_PASSWORD` cukup diset **di Render saja** — tidak perlu disalin ke
+   Vercel. Pastikan `BACKEND_ORIGIN` di Vercel menunjuk service ini, karena
+   gerbang `/admin` bergantung padanya.
 4. Simpan. Render otomatis **redeploy**. Tunggu service kembali hidup
-   (perhatikan **Logs**: `[backend] CraftAI Studio API berjalan di ...`).
+   (perhatikan **Logs**: `[backend] Aether Creative API berjalan di ...`).
 
 ## Langkah D — Verifikasi
 

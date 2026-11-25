@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useMemo, useState, useSyncExternalStore } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Footer } from '@/components/shop/Footer';
 import { Header } from '@/components/shop/Header';
 import { LastOrderHint } from '@/components/shop/LastOrderHint';
@@ -130,9 +130,10 @@ function TrackForm({ onTracked }: { onTracked: (entry: TrackedOrder) => void }) 
   const [number, setNumber] = useState(search.get('number') ?? '');
   const [state, setState] = useState<TrackState>({ phase: 'idle' });
 
-  async function lookup(e: { preventDefault: () => void }) {
-    e.preventDefault();
-    const value = number.trim().toUpperCase();
+  // Satu jalur pencarian dipakai tombol submit maupun lookup otomatis dari
+  // parameter ?number= (docs/REDESIGN.md §12).
+  const runLookup = async (rawValue: string, updateUrl: boolean) => {
+    const value = rawValue.trim().toUpperCase();
     if (!/^UK-ORD-\d{4}$/.test(value)) {
       setState({
         phase: 'error',
@@ -156,11 +157,29 @@ function TrackForm({ onTracked }: { onTracked: (entry: TrackedOrder) => void }) 
         templates.find((t) => t.id === orderRes.data.order.template_id)?.name ?? null;
       onTracked(toTracked(orderRes.data, templateName));
       setState({ phase: 'found', result: orderRes.data, templateName });
-      router.replace(`/orders?number=${encodeURIComponent(value)}`, { scroll: false });
+      if (updateUrl) router.replace(`/orders?number=${encodeURIComponent(value)}`, { scroll: false });
     } catch {
       setState({ phase: 'error', message: 'Jaringan terputus. Coba beberapa saat lagi.' });
     }
+  };
+
+  async function lookup(e: { preventDefault: () => void }) {
+    e.preventDefault();
+    await runLookup(number, true);
   }
+
+  // Auto-lookup: membuka /orders?number=UK-ORD-XXXX langsung menampilkan hasil
+  // pencarian tanpa menekan tombol. Hanya dijalankan sekali per mount supaya
+  // mengetik ulang tidak memicu pencarian ganda.
+  const autoRan = useRef(false);
+  useEffect(() => {
+    const value = (search.get('number') ?? '').trim();
+    if (!value || autoRan.current) return;
+    autoRan.current = true;
+    setNumber(value.toUpperCase());
+    void runLookup(value, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   // Dipakai tombol "Lanjutkan pesanan terakhir": mengisi nomor tanpa langsung
   // mencari, supaya pengguna tetap melihat apa yang akan dilacak.
@@ -246,17 +265,24 @@ function TrackForm({ onTracked }: { onTracked: (entry: TrackedOrder) => void }) 
               <div className="min-w-0">
                 <p className="font-mono text-[11px] text-ink-soft">{state.result.order.order_number}</p>
                 <h2 className="mt-2 break-words text-[22px] font-semibold leading-snug tracking-tight">
-                  Website {state.result.order.contact_name}
+                  Poster untuk {state.result.order.contact_name}
                 </h2>
                 <p className="mt-2 font-mono text-[11px] leading-relaxed text-ink-soft">
-                  {state.templateName ? `Template ${state.templateName} / ` : 'Template terdaftar / '}
+                  {state.templateName ? `Contoh ${state.templateName} / ` : 'Contoh terdaftar / '}
                   Paket {state.result.order.package_name} / {formatRupiah(state.result.order.total_price)} / dibuat{' '}
                   {new Date(state.result.order.created_at).toLocaleString('id-ID')}
                 </p>
               </div>
-              <span className="w-fit shrink-0 border border-ink px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em]">
-                {statusLabel(state.result.order.status)}
-              </span>
+              <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+                <span className="w-fit border border-ink px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em]">
+                  {statusLabel(state.result.order.status)}
+                </span>
+                {typeof state.result.remaining === 'number' && (
+                  <span className="w-fit font-mono text-[10px] text-ink-soft">
+                    Sisa kuota: {state.result.remaining} poster
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="p-5">
@@ -355,7 +381,7 @@ function TrackedOrders({ items, onClear }: { items: TrackedOrder[]; onClear: () 
                     {it.number}
                   </span>
                   <span className="mt-1 block truncate text-[14px] font-semibold">
-                    {it.name ? `Website ${it.name}` : 'Pesanan tanpa nama kontak'}
+                    {it.name ? `Poster untuk ${it.name}` : 'Pesanan tanpa nama kontak'}
                   </span>
                   <span className="mt-1 block font-mono text-[11px] text-ink-soft">
                     {[
@@ -438,11 +464,12 @@ export function OrdersClient() {
             Meja lacak / tanpa login
           </p>
           <h1 className="mt-3 text-[34px] font-semibold leading-[1] tracking-tight sm:text-[48px]">
-            Lacak posisi pesanan Anda
+            Lacak posisi pesanan poster Anda
           </h1>
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-ink-soft">
-            Cukup nomor pesanan. Anda akan melihat tahap pengerjaan, catatan developer, dan status
-            serah terima tanpa perlu membuat akun.
+            Cukup nomor pesanan. Anda akan melihat ringkasan paket, sisa kuota, tahap pengerjaan,
+            dan status serah terima tanpa perlu membuat akun. Membuka tautan dengan parameter
+            <span className="font-mono text-ink"> ?number= </span> langsung mencari otomatis.
           </p>
 
           <div className="mt-10 border-t border-ink pt-8">
@@ -455,7 +482,7 @@ export function OrdersClient() {
           <p className="mt-10 flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-rule pt-4 font-mono text-[11px] text-ink-soft">
             <span className="border border-rule px-1.5 py-0.5 uppercase tracking-wide">Belum punya order</span>
             <Link href="/#katalog" className="inline-flex min-h-11 items-center text-ink underline">
-              Mulai dari katalog template
+              Lihat contoh poster
             </Link>
           </p>
         </div>

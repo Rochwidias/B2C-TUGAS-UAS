@@ -4,7 +4,7 @@ import { OrdersClient } from '@/components/shop/OrdersClient';
 export const metadata: Metadata = {
   title: 'Lacak Pesanan',
   description:
-    'Lacak posisi pesanan website Anda tanpa login. Cukup nomor pesanan (UK-ORD-XXXX) untuk melihat tahap pengerjaan, catatan developer, dan status serah terima.',
+    'Lacak posisi pesanan poster Anda tanpa login. Cukup nomor pesanan (UK-ORD-XXXX) untuk melihat tahap pengerjaan, sisa kuota paket, estimasi, dan status serah terima.',
   alternates: { canonical: '/orders' },
 };
 

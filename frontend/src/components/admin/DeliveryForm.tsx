@@ -106,7 +106,7 @@ export default function DeliveryForm({ order }: { order: AdminOrder }) {
       </div>
 
       <p className="border-b border-rule px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
-        Isi setelah site di-deploy. Ketiga kolom wajib diisi: API menolak delivery yang
+        Isi setelah poster di-deploy. Ketiga kolom wajib diisi: API menolak delivery yang
         setengah, dan customer hanya melihat tombol unduh setelah status{' '}
         <span className="font-semibold text-ink">Completed</span>.
       </p>
@@ -129,7 +129,7 @@ export default function DeliveryForm({ order }: { order: AdminOrder }) {
               setSaved(null);
             }}
             disabled={busy}
-            placeholder="https://artisan-cafe.craftaistudio.my.id"
+            placeholder="https://poster-aether.my.id/UK-ORD-8812"
             aria-invalid={!validLive}
             aria-describedby={!validLive ? 'live-url-error' : undefined}
             className={fieldClass(validLive)}
@@ -158,7 +158,7 @@ export default function DeliveryForm({ order }: { order: AdminOrder }) {
               setSaved(null);
             }}
             disabled={busy}
-            placeholder="https://cdn.craftaistudio.my.id/export/UK-ORD-8812.zip"
+            placeholder="https://cdn.aethercreative.my.id/export/UK-ORD-8812.zip"
             aria-invalid={!validZip}
             aria-describedby={!validZip ? 'zip-url-error' : undefined}
             className={fieldClass(validZip)}

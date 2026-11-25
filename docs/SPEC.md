@@ -1,5 +1,11 @@
 # SPEC — CraftAI Studio (kontrak teknis, WAJIB dibaca semua agent)
 
+> **REDESIGN (berlaku sekarang):** arah produk, identitas, paket harga, skema draft
+> poster, endpoint baru, dan halaman sudah diganti ke **Aether Creative** —
+> kontraknya ada di [`REDESIGN.md`](REDESIGN.md). Dokumen ini tetap berlaku
+> **sejauh tidak bertentangan** dengan REDESIGN.md (terutama hal keamanan,
+> rate limit, kepemilikan file, error handling, dan aksesibilitas).
+
 Aplikasi UAS: **B2C AI-Assisted Template Customization Service**. Customer pilih template →
 isi brief → AI generate draft (JSON terstruktur) → checkout mock → developer/admin eksekusi →
 deploy → customer terima live URL + source code.
@@ -49,7 +55,7 @@ Pemisahan backend ↔ frontend:
 File yang TIDAK boleh dihapus: `PLAN.md`, `index.html` (artefak Milestone 1).
 Jangan `git commit` — parent yang commit. Jangan `rm -rf` apa pun.
 
-## Domain model (sqlite `frontend/data/app.db`, auto-create saat pertama query)
+## Domain model (sqlite `backend/data/app.db`, auto-create saat pertama query)
 
 ```ts
 type OrderStatus = 'draft' | 'paid' | 'in_progress' | 'review' | 'completed';

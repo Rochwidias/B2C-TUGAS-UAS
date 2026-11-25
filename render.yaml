@@ -1,4 +1,7 @@
-# Blueprint Render untuk backend CraftAI Studio.
+# Blueprint Render untuk backend Aether Creative.
+# Nama service (`craftai-backend`) dan disk (`craftai-data`) sengaja TIDAK
+# diganti: menggantinya membuat infrastruktur lama jadi layanan baru dan
+# database ikut terpisah. Nama hanya label, isi aplikasinya Aether Creative.
 # Deploy: Render -> New+ -> Blueprint -> pilih repo ini -> deploy otomatis.
 # Lihat docs/DEPLOY.md untuk langkah lengkap (termasuk isi env di Vercel).
 

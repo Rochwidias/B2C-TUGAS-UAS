@@ -151,14 +151,15 @@ export default function AdminBoard() {
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-ink pb-3">
         <div className="min-w-0">
           <p className="font-mono text-[10px] tracking-wider text-ink-soft uppercase">
-            Meja produksi / papan pesanan
+            Aether Creative / papan pesanan poster
           </p>
           <h1 className="mt-1 text-2xl leading-none font-semibold tracking-tight text-ink sm:text-[28px]">
             Papan <span className="font-serif italic">Pesanan</span>
           </h1>
           <p className="mt-1.5 max-w-[62ch] text-[12px] leading-relaxed text-ink-soft">
-            Pindahkan kartu antar kolom lewat dropdown di kartu. Setiap perubahan tercatat di
-            riwayat order dan langsung terlihat customer.
+            Pindahkan kartu antar kolom lewat dropdown di kartu. Tiap kartu menampilkan paket dan
+            sisa kuota poster; setiap perubahan tercatat di riwayat order dan langsung terlihat
+            customer.
           </p>
         </div>
 
@@ -195,7 +196,7 @@ export default function AdminBoard() {
 
       <section aria-labelledby="ringkasan-order" className="mt-3">
         <h2 id="ringkasan-order" className="sr-only">
-          Ringkasan order
+          Ringkasan order Aether Creative
         </h2>
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
           <StatsRow
