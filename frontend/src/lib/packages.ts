@@ -17,6 +17,38 @@ export function packagesBase(isServer: boolean): string {
   return isServer ? API_BASE_SERVER : API_BASE;
 }
 
+/** Daftar paket statis sebagai cadangan bila backend tidak tersedia.
+ *  Harga, ETA, dan garansi diambil dari `GET /api/packages` di produksi;
+ *  mock ini hanya dipakai sebagai isi awal / fallback tampilan dan ditandai
+ *  lewat `ok: false` agar UI tetap jujur akan sumber datanya.
+ */
+export const MOCK_PACKAGES: PackageOption[] = [
+  {
+    key: 'satuan',
+    name: 'Paket Satuan',
+    price: 50000,
+    quota: 1,
+    eta: '2–4 jam kerja',
+    guarantee: 'Revisi 2× dalam 3 hari',
+    etaGuarantee: '2–4 jam kerja · Revisi 2× dalam 3 hari',
+    description:
+      'Satu poster untuk promo tunggal, cocok UMKM yang butuh desain cepat dan tarif terjangkau.',
+    summary: '1 poster · ETA 2–4 jam kerja · Revisi 2× dalam 3 hari',
+  },
+  {
+    key: 'hemat',
+    name: 'Paket Hemat',
+    price: 100000,
+    quota: 3,
+    eta: '1–3 hari kerja',
+    guarantee: 'Revisi 3× dalam 7 hari (inkl. review editor)',
+    etaGuarantee: '1–3 hari kerja · Revisi 3× dalam 7 hari (inkl. review editor)',
+    description:
+      'Tiga poster dalam satu paket untuk kampanye berkelanjutan, dilengkapi review editor sebelum produksi.',
+    summary: '3 poster · ETA 1–3 hari kerja · Revisi 3× dalam 7 hari (inkl. review editor)',
+  },
+];
+
 function normalize(item: unknown): PackageOption | null {
   if (!item || typeof item !== 'object') return null;
   const raw = item as Record<string, unknown>;
@@ -39,7 +71,10 @@ function normalize(item: unknown): PackageOption | null {
   };
 }
 
-/** Ambil kartu paket. Kegagalan tidak pernah mengembalikan harga karangan. */
+/** Ambil kartu paket. Kegagalan tidak pernah mengembalikan harga karangan;
+ *  bila backend mati, paket statis (MOCK_PACKAGES) dipakai sebagai cadangan
+ *  tampilan dengan `ok: false` sehingga UI tetap jujur akan sumber datanya.
+ */
 export async function fetchPackages(base: string = API_BASE): Promise<PackagesResult> {
   try {
     const response = await fetch(`${base}/api/packages`, {
@@ -47,21 +82,29 @@ export async function fetchPackages(base: string = API_BASE): Promise<PackagesRe
       signal: AbortSignal.timeout(4000),
     });
     if (!response.ok) {
-      return { packages: [], ok: false, error: `Server paket menjawab HTTP ${response.status}.` };
+      return {
+        packages: MOCK_PACKAGES,
+        ok: false,
+        error: `Server paket menjawab HTTP ${response.status}. Menggunakan paket cadangan (simulasi).`,
+      };
     }
     const payload = (await response.json()) as { packages?: unknown };
     const packages = (Array.isArray(payload.packages) ? payload.packages : [])
       .map(normalize)
       .filter((pkg): pkg is PackageOption => pkg !== null);
     if (packages.length === 0) {
-      return { packages: [], ok: false, error: 'Daftar paket kosong atau tidak lengkap dari server.' };
+      return {
+        packages: MOCK_PACKAGES,
+        ok: false,
+        error: 'Daftar paket kosong dari server. Menggunakan paket cadangan (simulasi).',
+      };
     }
     return { packages, ok: true, error: null };
   } catch {
     return {
-      packages: [],
+      packages: MOCK_PACKAGES,
       ok: false,
-      error: 'Backend tidak terjangkau. Harga, estimasi, dan garansi tidak bisa dipastikan.',
+      error: 'Backend tidak terjangkau. Harga, estimasi, dan garansi menggunakan paket cadangan (simulasi).',
     };
   }
 }

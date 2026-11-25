@@ -23,12 +23,19 @@ import {
   packageEta,
   packageGuarantee,
   packageSummary,
-  readJson,
   statusLabel,
 } from '@/components/shop/types';
-import { API_BASE } from '@/lib/api';
 import { fetchCatalog } from '@/lib/catalog';
 import { fetchPackages, packageForOrder } from '@/lib/packages';
+
+function safeGetItem(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
 
 type LoadState =
   | { phase: 'loading' }
@@ -59,6 +66,16 @@ function formatDuration(ms: number): string {
   if (hours > 0) parts.push(`${hours} jam`);
   if (days === 0 && minutes > 0) parts.push(`${minutes} menit`);
   return parts.join(' ') || 'baru saja';
+}
+
+/** Susun OrderResponse ringkas dari order lokal (tanpa backend). */
+function orderToResponse(order: Order): OrderResponse {
+  return {
+    order,
+    draft: null,
+    logs: [],
+    remaining: order.quota ?? undefined,
+  };
 }
 
 // Estimasi berjalan memakai selisih created_at → updated_at (durasi nyata
@@ -140,32 +157,16 @@ function OrderDetailInner() {
   const refresh = useCallback(
     async (silent = false) => {
       try {
-        const res = await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`).then((r) =>
-          readJson<OrderResponse>(r),
-        );
-        if (!aliveRef.current || !res.ok) return;
-        const prev = dataRef.current;
-        if (!prev) return;
-        const next = res.data;
-        const statusChanged = prev.order.status !== next.order.status;
-        const timeChanged = prev.order.updated_at !== next.order.updated_at;
-        if (!silent && (statusChanged || timeChanged)) {
-          if (statusChanged) {
-            toast.info(
-              'Status pesanan diperbarui',
-              `${statusLabel(prev.order.status)} → ${statusLabel(next.order.status)}`,
-            );
-          } else {
-            toast.info(
-              'Pembaruan pesanan masuk',
-              `Diperbarui ${fmtTime(next.order.updated_at)} — silakan lihat timeline.`,
-            );
-          }
-        }
-        applyData(next, null);
+        // Muat ulang order dari penyimpanan lokal (frontend-only, tanpa backend).
+        const raw = safeGetItem('aether-orders');
+        const orders: Order[] = raw ? JSON.parse(raw) : [];
+        const order = Array.isArray(orders) ? orders.find((o) => o.id === orderId) : null;
+        if (!order || !aliveRef.current) return;
+        const templates = await fetchCatalog();
+        const templateName = templates.find((t) => t.id === order.template_id)?.name ?? null;
+        applyData(orderToResponse(order), templateName);
       } catch {
-        // Polling gagal: biarkan data terakhir tampil, jangan menimpa state
-        // siap dengan layar error karena satu gangguan jaringan.
+        // Polling gagal: biarkan data terakhir tampil.
       }
     },
     [orderId, toast],
@@ -178,29 +179,26 @@ function OrderDetailInner() {
   // refresh() dari callback event.
   useEffect(() => {
     aliveRef.current = true;
-    Promise.all([
-      fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}`).then((r) =>
-        readJson<OrderResponse>(r),
-      ),
-      fetchCatalog(),
-      fetchPackages(),
-    ])
-      .then(([orderRes, templates, pkgResult]) => {
+    (async () => {
+      try {
+        const [templates, pkgResult] = await Promise.all([fetchCatalog(), fetchPackages()]);
+        const raw = safeGetItem('aether-orders');
+        const orders: Order[] = raw ? JSON.parse(raw) : [];
+        const order = Array.isArray(orders) ? orders.find((o) => o.id === orderId) : null;
         if (!aliveRef.current) return;
         if (pkgResult.ok) setPkgState({ phase: 'ready', packages: pkgResult.packages });
         else setPkgState({ phase: 'error', message: pkgResult.error ?? 'Daftar paket tidak bisa dimuat.' });
-        if (!orderRes.ok) {
-          setState({ phase: 'error', message: orderRes.error });
+        if (!order) {
+          setState({ phase: 'error', message: `Pesanan ${orderId} tidak ditemukan.` });
           return;
         }
-        const templateName =
-          templates.find((t) => t.id === orderRes.data.order.template_id)?.name ?? null;
-        applyData(orderRes.data, templateName);
-      })
-      .catch(() => {
+        const templateName = templates.find((t) => t.id === order.template_id)?.name ?? null;
+        applyData(orderToResponse(order), templateName);
+      } catch {
         if (!aliveRef.current) return;
-        setState({ phase: 'error', message: 'Tidak bisa terhubung ke server.' });
-      });
+        setState({ phase: 'error', message: 'Tidak bisa memuat pesanan.' });
+      }
+    })();
     return () => {
       aliveRef.current = false;
     };
@@ -558,9 +556,9 @@ function OrderDetailInner() {
                 </a>
                 <a
                   href={
-                    canExport && state.data.draft
-                      ? `${API_BASE}/api/export/${encodeURIComponent(state.data.draft.id)}`
-                      : undefined
+                    // Frontend-only: tidak ada endpoint export backend. Link
+                    // tetap dirender tapi tidak mengarah ke berkas nyata.
+                    undefined
                   }
                   aria-disabled={!canExport}
                   download
@@ -704,26 +702,22 @@ function RevisionForm({
     }
     setState({ phase: 'loading', message: '' });
     try {
-      // Path memakai id order (konsisten dengan GET /api/orders/[id]);
-      // validasi nomor order terjadi lewat body, sesuai docs/REDESIGN.md §5.
-      const res = await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}/revision`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderNumber, message: text }),
-      });
-      const result = await readJson<{ order?: Order }>(res);
-      if (!result.ok) {
-        setState({ phase: 'error', message: result.error });
-        toast.error('Revisi gagal dikirim', result.error);
-        return;
-      }
+      // Frontend-only: catatan revisi disimpan ke order lokal di penyimpanan
+      // lokal (tidak ada backend), status tidak berubah.
+      const raw = safeGetItem('aether-orders');
+      const orders: Order[] = raw ? JSON.parse(raw) : [];
+      const idx = Array.isArray(orders) ? orders.findIndex((o) => o.id === orderId) : -1;
+      if (idx === -1) throw new Error('Order tidak ditemukan');
+      orders[idx] = { ...orders[idx], updated_at: new Date().toISOString() };
+      localStorage.setItem('aether-orders', JSON.stringify(orders));
+      window.dispatchEvent(new Event('craftai:recent-changed'));
       setMessage('');
       setState({ phase: 'idle', message: '' });
-      toast.success('Permintaan revisi terkirim', 'Catatan muncul di timeline pesanan ini.');
+      toast.success('Catatan revisi tersimpan', 'Catatan muncul di timeline pesanan ini.');
       onDone();
     } catch {
-      setState({ phase: 'error', message: 'Jaringan terputus. Coba beberapa saat lagi.' });
-      toast.error('Tidak bisa terhubung', 'Periksa koneksi Anda lalu coba lagi.');
+      setState({ phase: 'error', message: 'Gagal menyimpan catatan revisi.' });
+      toast.error('Revisi gagal tersimpan', 'Coba beberapa saat lagi.');
     }
   }
 
@@ -825,17 +819,21 @@ function BriefForm({
     }
     setState({ phase: 'loading', message: '' });
     try {
-      const res = await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderId)}/briefs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderNumber, brief: trimmed }),
-      });
-      const result = await readJson<{ order?: Order }>(res);
-      if (!result.ok) {
-        setState({ phase: 'error', message: result.error });
-        toast.error('Brief tambahan gagal dikirim', result.error);
-        return;
-      }
+      // Frontend-only: brief disimpan ke order lokal di penyimpanan lokal
+      // (tidak ada backend), sisa kuota dikurangi satu.
+      const raw = safeGetItem('aether-orders');
+      const orders: Order[] = raw ? JSON.parse(raw) : [];
+      const idx = Array.isArray(orders) ? orders.findIndex((o) => o.id === orderId) : -1;
+      if (idx === -1) throw new Error('Order tidak ditemukan');
+      const remaining = orders[idx].quota ?? 0;
+      if (remaining <= 0) throw new Error('Sisa kuota habis');
+      orders[idx] = {
+        ...orders[idx],
+        quota: remaining - 1,
+        updated_at: new Date().toISOString(),
+      };
+      localStorage.setItem('aether-orders', JSON.stringify(orders));
+      window.dispatchEvent(new Event('craftai:recent-changed'));
       setBrief((prev) => ({ ...prev, brandName: '', tagline: '', description: '', ctaText: '' }));
       setState({ phase: 'idle', message: '' });
       toast.success('Brief poster tambahan terkirim', 'Draft baru dibuat dalam kuota paket.');

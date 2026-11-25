@@ -6,9 +6,8 @@ import { useToast } from '@/components/ui/Toast';
 import {
   THEME_OPTIONS,
   type Brief,
-  type OrderBriefPayload,
+  type Order,
   type OrderContact,
-  type OrderCreatedResponse,
   type PackageOption,
   type Template,
   type ThemeColorKey,
@@ -17,12 +16,9 @@ import {
   packageEta,
   packageGuarantee,
   packageSummary,
-  readJson,
-  unwrapData,
   whatsappStageHint,
 } from './types';
 import { contactChatUrl, useContact } from './whatsapp';
-import { API_BASE } from '@/lib/api';
 import { FALLBACK_TEMPLATES, fetchCatalogResult } from '@/lib/catalog';
 import { fetchPackages } from '@/lib/packages';
 
@@ -349,23 +345,6 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
 
   const briefValid = Object.keys(errors).length === 0;
 
-  // Bentuk brief untuk POST /api/orders: medan kontrak
-  // (docs/WHATSAPP-FLOW.md) diisi dari kolom form, dan medan bentuk-form lama
-  // ikut dikirim supaya back-office tetap punya nama brand, tagline, serta
-  // deskripsi asli pelanggan.
-  function buildBriefPayload(): OrderBriefPayload {
-    const theme = THEME_OPTIONS.find((option) => option.value === brief.themeColor);
-    return {
-      ...brief,
-      templateId,
-      merekLokasi: brief.brandName.trim(),
-      segmenTarget: template ? categoryLabel(template.category) : '',
-      suasanaMerek: theme?.label ?? brief.themeColor,
-      aksiUtama: brief.ctaText.trim(),
-      nadaRekaman: brief.toneOfVoice,
-    };
-  }
-
   // Satu aksi kirim: pesanan dicatat di web, lalu konfirmasi dan serah terima
   // berpindah ke chat WhatsApp (docs/WHATSAPP-FLOW.md §Alur baru).
   async function submitOrder(e: React.FormEvent) {
@@ -408,55 +387,51 @@ export function CustomizerClient({ templateId }: { templateId: string }) {
     setOrder({ phase: 'loading' });
     try {
       const orderContact: OrderContact = { name, whatsapp, ...(email ? { email } : {}) };
-      const res = await fetch(`${API_BASE}/api/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId,
-          packageKey: selected.key,
-          brief: buildBriefPayload(),
-          contact: orderContact,
-          // Medan lama tetap dikirim agar back-office yang belum pindah kontrak
-          // menerima pesanan yang sama (deviasi kontrak, dicatat di ringkasan).
-          contactName: orderContact.name,
-          contactWhatsapp: orderContact.whatsapp,
-          contactEmail: orderContact.email ?? '',
-        }),
-      });
-      const result = await readJson<OrderCreatedResponse>(res);
-      if (!result.ok) {
-        setOrder({ phase: 'error', message: result.error });
-        toast.error('Pesanan gagal dikirim', result.error);
-        return;
+      // Simulasi pesanan lokal (frontend-only, tanpa backend). Nomor order dibangkitkan
+      // di browser dan order lengkap disimpan ke localStorage sehingga halaman
+      // /orders dan /orders/[id] bisa menampilkannya tanpa memanggil backend.
+      const orderNumber = `ATH-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const orderId = `aether-${Date.now()}`;
+      const now = new Date().toISOString();
+      const createdOrder: Order = {
+        id: orderId,
+        order_number: orderNumber,
+        template_id: templateId,
+        status: 'draft',
+        payment_status: 'belum_dibayar',
+        total_price: selected.price,
+        contact_name: orderContact.name,
+        contact_whatsapp: orderContact.whatsapp,
+        contact_email: orderContact.email ?? '',
+        package_name: selected.name,
+        package_key: selected.key,
+        quota: selected.quota,
+        live_website_url: null,
+        download_zip_url: null,
+        dev_note: null,
+        created_at: now,
+        updated_at: now,
+      };
+      try {
+        const raw = localStorage.getItem('aether-orders');
+        const orders: Order[] = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(orders)) throw new Error('format order tersimpan rusak');
+        orders.unshift(createdOrder);
+        localStorage.setItem('aether-orders', JSON.stringify(orders.slice(0, 50)));
+      } catch {
+        // Penyimpanan diblokir: lanjutkan tanpa riwayat order.
       }
-      // Respons baru dibungkus {data: {order, whatsappUrl}}; route lama
-      // mengirimnya di level teratas.
-      const payload = unwrapData(result.data);
-      const created = payload.order ?? null;
-      const orderNumber = (payload.orderNumber ?? created?.order_number ?? '').trim();
-      if (!orderNumber) {
-        setOrder({
-          phase: 'error',
-          message: 'Server menerima pesanan tetapi tidak mengembalikan nomor pesanan. Coba lagi.',
-        });
-        toast.error('Nomor pesanan tidak diterima', 'Ulangi pengiriman pesanan.');
-        return;
-      }
-      const status = created?.status ?? 'draft';
-      const orderId = created?.id ?? '';
-      const whatsappUrl = typeof payload.whatsappUrl === 'string' ? payload.whatsappUrl : '';
-      setOrder({ phase: 'done', orderNumber, orderId, status, whatsappUrl });
-      // Simpan nomor order terakhir agar /orders bisa menawarkan "Lanjutkan
-      // pesanan terakhir" (lihat components/shop/LastOrderHint).
       try {
         localStorage.setItem(
           'craftai-last-order',
-          JSON.stringify({ number: orderNumber, id: orderId, at: Date.now(), status }),
+          JSON.stringify({ number: orderNumber, id: orderId, at: Date.now(), status: 'draft' }),
         );
         window.dispatchEvent(new Event('craftai:last-order-changed'));
       } catch {
         // Penyimpanan diblokir: tombol WhatsApp tetap jalan tanpa pintasan.
       }
+      const whatsappUrl = (contactChatUrl(contactInfo, orderNumber, whatsappStageHint('draft')) ?? '');
+      setOrder({ phase: 'done', orderNumber, orderId, status: 'draft', whatsappUrl });
       toast.success(
         'Pesanan tercatat',
         `Nomor ${orderNumber} masuk antrean editor. Konfirmasi berjalan di WhatsApp.`,

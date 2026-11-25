@@ -10,13 +10,12 @@ import { Stepper } from '@/components/shop/Stepper';
 import { WhatsAppChat } from '@/components/shop/WhatsAppChat';
 import {
   STATUS_STEPS,
+  type Order,
   type OrderResponse,
   formatRupiah,
-  readJson,
   statusLabel,
 } from '@/components/shop/types';
 import { EmptyBlock } from '@/components/ui/EmptyBlock';
-import { API_BASE } from '@/lib/api';
 import { fetchCatalog } from '@/lib/catalog';
 
 type TrackState =
@@ -120,6 +119,55 @@ function toTracked(result: OrderResponse, templateName: string | null): TrackedO
   };
 }
 
+/** Susun OrderResponse ringkas dari order lokal (tanpa backend). */
+function orderToResponse(order: Order): OrderResponse {
+  return {
+    order,
+    draft: null,
+    logs: [],
+    remaining: order.quota ?? undefined,
+  };
+}
+
+/** Benarkan pesanan demo UK-ORD-8812 di penyimpanan lokal bila belum ada order
+ *  sama sekali, sehingga alur lacak demo dapat dicoba segera tanpa backend. */
+function ensureDemoOrder(): void {
+  try {
+    const raw = safeGetItem('aether-orders');
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return;
+    }
+  } catch {
+    // Storage rusak atau diblokir: timpa dengan pesanan demo.
+  }
+  const demo: Order = {
+    id: 'demo-uk-ord-8812',
+    order_number: 'UK-ORD-8812',
+    template_id: 'artisan-cafe',
+    status: 'completed',
+    payment_status: 'lunas',
+    total_price: 100000,
+    contact_name: 'Budi Santoso',
+    contact_whatsapp: '6281234567890',
+    contact_email: 'budi@example.com',
+    package_name: 'Paket Hemat',
+    package_key: 'hemat',
+    quota: 3,
+    live_website_url: null,
+    download_zip_url: null,
+    dev_note: null,
+    created_at: '2026-11-20T08:00:00Z',
+    updated_at: '2026-11-22T14:30:00Z',
+  };
+  try {
+    localStorage.setItem('aether-orders', JSON.stringify([demo]));
+    window.dispatchEvent(new Event('craftai:recent-changed'));
+  } catch {
+    // Penyimpanan diblokir: demo tidak tersedia, tapi formulir lacak tetap jalan.
+  }
+}
+
 const FILTERS: { key: string; label: string }[] = [
   { key: 'semua', label: 'Semua' },
   ...STATUS_STEPS.map((s) => ({ key: s.key, label: s.label })),
@@ -144,23 +192,26 @@ function TrackForm({ onTracked }: { onTracked: (entry: TrackedOrder) => void }) 
     }
     setState({ phase: 'loading' });
     try {
-      const orderRes = await fetch(`${API_BASE}/api/orders?number=${encodeURIComponent(value)}`).then((r) =>
-        readJson<OrderResponse>(r),
-      );
-      if (!orderRes.ok) {
-        setState({ phase: 'error', message: orderRes.error });
+      // Frontend-only: cari pesanan di penyimpanan lokal, bukan memanggil backend.
+      ensureDemoOrder();
+      const raw = safeGetItem('aether-orders');
+      const orders: Order[] = raw ? JSON.parse(raw) : [];
+      const order = Array.isArray(orders) ? orders.find((o) => o.order_number === value) : null;
+      if (!order) {
+        setState({
+          phase: 'error',
+          message: `Nomor pesanan ${value} tidak ditemukan. Coba nomor demo UK-ORD-8812.`,
+        });
         return;
       }
-      // Nama template diambil lewat katalog: jatuh ke data bawaan bila backend
-      // tidak terjangkau, supaya hasil lacak tetap lengkap.
+      // Nama template dari katalog (data bawaan bila backend tidak terjangkau).
       const templates = await fetchCatalog();
-      const templateName =
-        templates.find((t) => t.id === orderRes.data.order.template_id)?.name ?? null;
-      onTracked(toTracked(orderRes.data, templateName));
-      setState({ phase: 'found', result: orderRes.data, templateName });
+      const templateName = templates.find((t) => t.id === order.template_id)?.name ?? null;
+      onTracked(toTracked(orderToResponse(order), templateName));
+      setState({ phase: 'found', result: orderToResponse(order), templateName });
       if (updateUrl) router.replace(`/orders?number=${encodeURIComponent(value)}`, { scroll: false });
     } catch {
-      setState({ phase: 'error', message: 'Jaringan terputus. Coba beberapa saat lagi.' });
+      setState({ phase: 'error', message: 'Gagal membaca pesanan tersimpan. Coba beberapa saat lagi.' });
     }
   };
 

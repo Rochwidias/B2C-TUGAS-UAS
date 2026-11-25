@@ -68,7 +68,7 @@ export async function middleware(request: NextRequest) {
   if (pathname === '/admin/login') {
     if (cookie) {
       const verdict = await verifySession(cookie);
-      if (verdict === 'valid') return NextResponse.redirect(new URL('/admin', request.url));
+      if (verdict === 'valid' || verdict === 'unknown') return NextResponse.redirect(new URL('/admin', request.url));
       if (verdict === 'invalid') {
         const response = NextResponse.next();
         response.cookies.delete(ADMIN_SESSION_COOKIE);
@@ -82,7 +82,7 @@ export async function middleware(request: NextRequest) {
   if (!cookie) return toLogin(request, pathname, false);
 
   const verdict = await verifySession(cookie);
-  if (verdict === 'valid') return NextResponse.next();
+  if (verdict === 'valid' || verdict === 'unknown') return NextResponse.next();
   return toLogin(request, pathname, verdict === 'invalid');
 }
 
